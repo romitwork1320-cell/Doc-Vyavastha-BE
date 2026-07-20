@@ -1,0 +1,13 @@
+bin/
+tmp/
+.env
+*.log
+*.exe
+
+# IDEs and editors
+.idea/
+.vscode/
+
+# System files
+.DS_Store
+Thumbs.db

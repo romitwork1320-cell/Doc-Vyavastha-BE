@@ -1,0 +1,21 @@
+# air (github.com/air-verse/air) live-reload config for local development.
+# Rebuilds and restarts cmd/api on .go / .sql changes.
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  cmd = "go build -o ./tmp/api ./cmd/api"
+  bin = "./tmp/api"
+  full_bin = "./tmp/api"
+  include_ext = ["go", "sql"]
+  exclude_dir = ["tmp", "bin"]
+  delay = 500
+  stop_on_error = true
+  send_interrupt = true
+  kill_delay = "2s"
+
+[misc]
+  clean_on_exit = true
+
+[log]
+  time = true
