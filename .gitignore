@@ -14,3 +14,6 @@ Thumbs.db
 
 # User uploaded files
 uploads/
+
+# Temporary Go build directories
+go-build*/
