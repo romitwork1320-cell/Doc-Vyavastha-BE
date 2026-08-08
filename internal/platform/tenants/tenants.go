@@ -15,14 +15,12 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/thinkparq/edconsultancy-be/internal/apiresp"
 	"github.com/thinkparq/edconsultancy-be/internal/conv"
 	"github.com/thinkparq/edconsultancy-be/internal/db/public"
-	"github.com/thinkparq/edconsultancy-be/internal/db/tenant"
 	"github.com/thinkparq/edconsultancy-be/internal/reqctx"
 	"github.com/thinkparq/edconsultancy-be/internal/tenancy"
 	"github.com/thinkparq/edconsultancy-be/internal/web"
@@ -209,40 +207,6 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 2. Assign the user to the default branch created by migrations
-	err = h.tm.InTenantTxByID(ctx, t.TenantID, func(tq *tenant.Queries) error {
-		branches, err := tq.ListBranches(ctx)
-		if err != nil {
-			return fmt.Errorf("listing branches: %w", err)
-		}
-		
-		var branchID uuid.UUID
-		if len(branches) > 0 {
-			branchID = branches[0].ID
-		} else {
-			branchCode := "MAIN"
-			branchAddr := "Head Office"
-			b, err := tq.CreateBranch(ctx, tenant.CreateBranchParams{
-				Name:    "Main Branch",
-				Code:    &branchCode,
-				Address: &branchAddr,
-				Status:  "Active",
-			})
-			if err != nil {
-				return fmt.Errorf("creating default branch: %w", err)
-			}
-			branchID = b.ID
-		}
-		
-		return tq.AssignUserToBranch(ctx, tenant.AssignUserToBranchParams{
-			UserID:   userID,
-			BranchID: branchID,
-		})
-	})
-	if err != nil {
-		h.fail(w, err)
-		return
-	}
 
 	// FE expects the new tenant id (a number) as the created payload.
 	apiresp.Created(w, t.TenantID, "Tenant created")

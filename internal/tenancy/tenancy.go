@@ -35,6 +35,11 @@ func NewManager(pool *pgxpool.Pool) *Manager {
 	return &Manager{pool: pool, pub: public.New(pool), cache: make(map[int64]string)}
 }
 
+// Pool returns the underlying database pool.
+func (m *Manager) Pool() *pgxpool.Pool {
+	return m.pool
+}
+
 // Schema resolves a tenant id to its (validated) schema name, caching results.
 func (m *Manager) Schema(ctx context.Context, tenantID int64) (string, error) {
 	m.mu.RLock()
@@ -124,8 +129,10 @@ type NewTenant struct {
 	TenantName   string
 	CompanyName  string
 	ContactPhone string
-	ContactEmail string
-	CreatedBy    *int64
+	ContactEmail       string
+	OrgType            *string
+	OrganizationTypeID *int64
+	CreatedBy          *int64
 }
 
 // ProvisionNewTenant inserts the tenant row (with a canonical tenant_NNNN
@@ -143,11 +150,13 @@ func (m *Manager) ProvisionNewTenant(ctx context.Context, in NewTenant) (public.
 	t, err := q.CreateTenant(ctx, public.CreateTenantParams{
 		TenantName:   in.TenantName,
 		CompanyName:  strPtr(in.CompanyName),
-		SchemaName:   tmpSchema,
-		TenantCode:   nil,
-		ContactPhone: strPtr(in.ContactPhone),
-		ContactEmail: strPtr(in.ContactEmail),
-		CreatedBy:    in.CreatedBy,
+		ContactPhone:       strPtr(in.ContactPhone),
+		ContactEmail:       strPtr(in.ContactEmail),
+		OrgType:            in.OrgType,
+		OrganizationTypeID: in.OrganizationTypeID,
+		SchemaName:         tmpSchema,
+		TenantCode:         nil,
+		CreatedBy:          in.CreatedBy,
 	})
 	if err != nil {
 		return public.Tenant{}, fmt.Errorf("create tenant: %w", err)

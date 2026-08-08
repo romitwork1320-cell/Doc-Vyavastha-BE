@@ -33,11 +33,12 @@ func (h *Handler) Mount(r chi.Router) {
 		r.Post("/select-tenant", h.selectTenant)
 		r.Post("/refresh-token", h.refresh)
 		r.Post("/logout", h.logout)
+		r.Post("/login", h.login)
+		r.Post("/register-identity", h.registerIdentity)
 		r.Post("/google-login", h.googleLogin)
-		r.Post("/google-signup", h.googleLogin) // signup folds into the same google flow
 		r.Post("/send-otp", h.sendOTP)
 		r.Post("/verify-otp", h.verifyOTP)
-		r.Post("/complete-profile", h.completeProfile)
+		r.Post("/create-workspace", h.createWorkspace)
 		r.Post("/resend-verification", h.resendVerification)
 		r.Get("/verify-email", h.verifyEmail)
 	})
@@ -54,13 +55,35 @@ func (h *Handler) selectTenant(w http.ResponseWriter, r *http.Request) {
 		apiresp.Unauthorized(w, "Invalid or expired token")
 		return
 	}
-	resp, refreshRaw, err := h.svc.SelectTenant(r.Context(), userID, req.TenantID, r.UserAgent(), clientIP(r))
+	resp, refreshRaw, err := h.svc.SelectTenant(r.Context(), userID, req, r.UserAgent(), clientIP(r))
 	if err != nil {
 		h.fail(w, err)
 		return
 	}
 	setRefreshCookie(w, h.cfg, refreshRaw, h.cfg.JWTRefreshTTL)
 	apiresp.OK(w, resp, "Workspace selected")
+}
+
+func (h *Handler) createWorkspace(w http.ResponseWriter, r *http.Request) {
+	var req createWorkspaceRequest
+	if err := web.Bind(r, &req); err != nil {
+		apiresp.BadRequest(w, err.Error())
+		return
+	}
+	userID, err := h.svc.UserIDFromToken(bearer(r))
+	if err != nil {
+		apiresp.Unauthorized(w, "Invalid or expired token")
+		return
+	}
+	resp, refreshRaw, err := h.svc.CreateWorkspace(r.Context(), userID, req, r.UserAgent(), clientIP(r))
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	if refreshRaw != "" {
+		setRefreshCookie(w, h.cfg, refreshRaw, h.cfg.JWTRefreshTTL)
+	}
+	apiresp.Created(w, resp, "Workspace created")
 }
 
 func (h *Handler) refresh(w http.ResponseWriter, r *http.Request) {
@@ -78,6 +101,40 @@ func (h *Handler) logout(w http.ResponseWriter, r *http.Request) {
 	h.svc.Logout(r.Context(), readRefreshCookie(r, h.cfg))
 	clearRefreshCookie(w, h.cfg)
 	apiresp.OK(w, nil, "Logged out")
+}
+
+func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
+	var req loginRequest
+	if err := web.Bind(r, &req); err != nil {
+		apiresp.BadRequest(w, err.Error())
+		return
+	}
+	resp, refreshRaw, err := h.svc.Login(r.Context(), req, r.UserAgent(), clientIP(r))
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	if refreshRaw != "" {
+		setRefreshCookie(w, h.cfg, refreshRaw, h.cfg.JWTRefreshTTL)
+	}
+	apiresp.OK(w, resp, "Login successful")
+}
+
+func (h *Handler) registerIdentity(w http.ResponseWriter, r *http.Request) {
+	var req registerIdentityRequest
+	if err := web.Bind(r, &req); err != nil {
+		apiresp.BadRequest(w, err.Error())
+		return
+	}
+	resp, refreshRaw, err := h.svc.RegisterIdentity(r.Context(), req, r.UserAgent(), clientIP(r))
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	if refreshRaw != "" {
+		setRefreshCookie(w, h.cfg, refreshRaw, h.cfg.JWTRefreshTTL)
+	}
+	apiresp.OK(w, resp, "Identity registered")
 }
 
 func (h *Handler) googleLogin(w http.ResponseWriter, r *http.Request) {
@@ -127,22 +184,7 @@ func (h *Handler) verifyOTP(w http.ResponseWriter, r *http.Request) {
 	apiresp.OK(w, resp, "OTP verified")
 }
 
-func (h *Handler) completeProfile(w http.ResponseWriter, r *http.Request) {
-	var req completeProfileRequest
-	if err := web.Bind(r, &req); err != nil {
-		apiresp.BadRequest(w, err.Error())
-		return
-	}
-	resp, refreshRaw, err := h.svc.CompleteProfile(r.Context(), req, r.UserAgent(), clientIP(r))
-	if err != nil {
-		h.fail(w, err)
-		return
-	}
-	if refreshRaw != "" {
-		setRefreshCookie(w, h.cfg, refreshRaw, h.cfg.JWTRefreshTTL)
-	}
-	apiresp.OK(w, resp, "Profile completed")
-}
+
 
 func (h *Handler) resendVerification(w http.ResponseWriter, r *http.Request) {
 	var req resendVerificationRequest
@@ -179,7 +221,7 @@ func (h *Handler) fail(w http.ResponseWriter, err error) {
 		return
 	}
 	h.logger.Error("auth handler error", "err", err)
-	apiresp.ServerError(w, "Something went wrong")
+	apiresp.ServerError(w, err.Error())
 }
 
 func bearer(r *http.Request) string {

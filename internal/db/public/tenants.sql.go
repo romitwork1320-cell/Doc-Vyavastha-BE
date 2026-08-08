@@ -14,7 +14,7 @@ const addTenantWhatsappBalance = `-- name: AddTenantWhatsappBalance :one
 UPDATE tenants
 SET whatsapp_balance = COALESCE(whatsapp_balance, 0) + $1, updated_at = now()
 WHERE tenant_id = $2
-RETURNING tenant_id, tenant_name, company_name, tenant_code, schema_name, subdomain, status, contact_email, contact_phone, logo_url, whatsapp_balance, whatsapp_sent_count, is_active, created_by, updated_by, created_at, updated_at
+RETURNING tenant_id, tenant_name, company_name, tenant_code, schema_name, subdomain, status, contact_email, contact_phone, logo_url, whatsapp_balance, whatsapp_sent_count, is_active, created_by, updated_by, created_at, updated_at, org_type, kyc_status, kyc_verified_by, kyc_verified_at, kyc_rejected_by, kyc_rejected_at, kyc_rejection_reason, organization_type_id
 `
 
 type AddTenantWhatsappBalanceParams struct {
@@ -43,6 +43,14 @@ func (q *Queries) AddTenantWhatsappBalance(ctx context.Context, arg AddTenantWha
 		&i.UpdatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OrgType,
+		&i.KycStatus,
+		&i.KycVerifiedBy,
+		&i.KycVerifiedAt,
+		&i.KycRejectedBy,
+		&i.KycRejectedAt,
+		&i.KycRejectionReason,
+		&i.OrganizationTypeID,
 	)
 	return i, err
 }
@@ -62,19 +70,21 @@ func (q *Queries) CountTenants(ctx context.Context, filter string) (int64, error
 }
 
 const createTenant = `-- name: CreateTenant :one
-INSERT INTO tenants (tenant_name, company_name, schema_name, tenant_code, contact_phone, contact_email, created_by)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING tenant_id, tenant_name, company_name, tenant_code, schema_name, subdomain, status, contact_email, contact_phone, logo_url, whatsapp_balance, whatsapp_sent_count, is_active, created_by, updated_by, created_at, updated_at
+INSERT INTO tenants (tenant_name, company_name, schema_name, tenant_code, contact_phone, contact_email, org_type, organization_type_id, created_by)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+RETURNING tenant_id, tenant_name, company_name, tenant_code, schema_name, subdomain, status, contact_email, contact_phone, logo_url, whatsapp_balance, whatsapp_sent_count, is_active, created_by, updated_by, created_at, updated_at, org_type, kyc_status, kyc_verified_by, kyc_verified_at, kyc_rejected_by, kyc_rejected_at, kyc_rejection_reason, organization_type_id
 `
 
 type CreateTenantParams struct {
-	TenantName   string
-	CompanyName  *string
-	SchemaName   string
-	TenantCode   *string
-	ContactPhone *string
-	ContactEmail *string
-	CreatedBy    *int64
+	TenantName         string
+	CompanyName        *string
+	SchemaName         string
+	TenantCode         *string
+	ContactPhone       *string
+	ContactEmail       *string
+	OrgType            *string
+	OrganizationTypeID *int64
+	CreatedBy          *int64
 }
 
 func (q *Queries) CreateTenant(ctx context.Context, arg CreateTenantParams) (Tenant, error) {
@@ -85,6 +95,8 @@ func (q *Queries) CreateTenant(ctx context.Context, arg CreateTenantParams) (Ten
 		arg.TenantCode,
 		arg.ContactPhone,
 		arg.ContactEmail,
+		arg.OrgType,
+		arg.OrganizationTypeID,
 		arg.CreatedBy,
 	)
 	var i Tenant
@@ -106,12 +118,20 @@ func (q *Queries) CreateTenant(ctx context.Context, arg CreateTenantParams) (Ten
 		&i.UpdatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OrgType,
+		&i.KycStatus,
+		&i.KycVerifiedBy,
+		&i.KycVerifiedAt,
+		&i.KycRejectedBy,
+		&i.KycRejectedAt,
+		&i.KycRejectionReason,
+		&i.OrganizationTypeID,
 	)
 	return i, err
 }
 
 const getTenant = `-- name: GetTenant :one
-SELECT tenant_id, tenant_name, company_name, tenant_code, schema_name, subdomain, status, contact_email, contact_phone, logo_url, whatsapp_balance, whatsapp_sent_count, is_active, created_by, updated_by, created_at, updated_at FROM tenants WHERE tenant_id = $1
+SELECT tenant_id, tenant_name, company_name, tenant_code, schema_name, subdomain, status, contact_email, contact_phone, logo_url, whatsapp_balance, whatsapp_sent_count, is_active, created_by, updated_by, created_at, updated_at, org_type, kyc_status, kyc_verified_by, kyc_verified_at, kyc_rejected_by, kyc_rejected_at, kyc_rejection_reason, organization_type_id FROM tenants WHERE tenant_id = $1
 `
 
 func (q *Queries) GetTenant(ctx context.Context, tenantID int64) (Tenant, error) {
@@ -135,12 +155,20 @@ func (q *Queries) GetTenant(ctx context.Context, tenantID int64) (Tenant, error)
 		&i.UpdatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OrgType,
+		&i.KycStatus,
+		&i.KycVerifiedBy,
+		&i.KycVerifiedAt,
+		&i.KycRejectedBy,
+		&i.KycRejectedAt,
+		&i.KycRejectionReason,
+		&i.OrganizationTypeID,
 	)
 	return i, err
 }
 
 const getTenantBySchema = `-- name: GetTenantBySchema :one
-SELECT tenant_id, tenant_name, company_name, tenant_code, schema_name, subdomain, status, contact_email, contact_phone, logo_url, whatsapp_balance, whatsapp_sent_count, is_active, created_by, updated_by, created_at, updated_at FROM tenants WHERE schema_name = $1
+SELECT tenant_id, tenant_name, company_name, tenant_code, schema_name, subdomain, status, contact_email, contact_phone, logo_url, whatsapp_balance, whatsapp_sent_count, is_active, created_by, updated_by, created_at, updated_at, org_type, kyc_status, kyc_verified_by, kyc_verified_at, kyc_rejected_by, kyc_rejected_at, kyc_rejection_reason, organization_type_id FROM tenants WHERE schema_name = $1
 `
 
 func (q *Queries) GetTenantBySchema(ctx context.Context, schemaName string) (Tenant, error) {
@@ -164,6 +192,14 @@ func (q *Queries) GetTenantBySchema(ctx context.Context, schemaName string) (Ten
 		&i.UpdatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OrgType,
+		&i.KycStatus,
+		&i.KycVerifiedBy,
+		&i.KycVerifiedAt,
+		&i.KycRejectedBy,
+		&i.KycRejectedAt,
+		&i.KycRejectionReason,
+		&i.OrganizationTypeID,
 	)
 	return i, err
 }
@@ -218,7 +254,7 @@ func (q *Queries) ListAllTenantSchemas(ctx context.Context) ([]ListAllTenantSche
 }
 
 const listTenants = `-- name: ListTenants :many
-SELECT t.tenant_id, t.tenant_name, t.company_name, t.tenant_code, t.schema_name, t.subdomain, t.status, t.contact_email, t.contact_phone, t.logo_url, t.whatsapp_balance, t.whatsapp_sent_count, t.is_active, t.created_by, t.updated_by, t.created_at, t.updated_at,
+SELECT t.tenant_id, t.tenant_name, t.company_name, t.tenant_code, t.schema_name, t.subdomain, t.status, t.contact_email, t.contact_phone, t.logo_url, t.whatsapp_balance, t.whatsapp_sent_count, t.is_active, t.created_by, t.updated_by, t.created_at, t.updated_at, t.org_type, t.kyc_status, t.kyc_verified_by, t.kyc_verified_at, t.kyc_rejected_by, t.kyc_rejected_at, t.kyc_rejection_reason, t.organization_type_id,
     COALESCE(to_char(s.end_date, 'YYYY-MM-DD'), '')::text AS subscription_end_date,
     COALESCE(s.status, '')::text AS subscription_status
 FROM tenants t
@@ -258,6 +294,14 @@ type ListTenantsRow struct {
 	UpdatedBy           *int64
 	CreatedAt           time.Time
 	UpdatedAt           *time.Time
+	OrgType             *string
+	KycStatus           string
+	KycVerifiedBy       *int64
+	KycVerifiedAt       *time.Time
+	KycRejectedBy       *int64
+	KycRejectedAt       *time.Time
+	KycRejectionReason  *string
+	OrganizationTypeID  *int64
 	SubscriptionEndDate string
 	SubscriptionStatus  string
 }
@@ -289,6 +333,14 @@ func (q *Queries) ListTenants(ctx context.Context, arg ListTenantsParams) ([]Lis
 			&i.UpdatedBy,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.OrgType,
+			&i.KycStatus,
+			&i.KycVerifiedBy,
+			&i.KycVerifiedAt,
+			&i.KycRejectedBy,
+			&i.KycRejectedAt,
+			&i.KycRejectionReason,
+			&i.OrganizationTypeID,
 			&i.SubscriptionEndDate,
 			&i.SubscriptionStatus,
 		); err != nil {

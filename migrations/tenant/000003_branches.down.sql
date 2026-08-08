@@ -1,3 +1,0 @@
-ALTER TABLE students DROP COLUMN IF EXISTS branch_id;
-DROP TABLE IF EXISTS user_branches;
-DROP TABLE IF EXISTS branches;

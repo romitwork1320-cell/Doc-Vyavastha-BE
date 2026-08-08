@@ -1,0 +1,2 @@
+ALTER TABLE application_document_version_files
+DROP COLUMN client_document_id;

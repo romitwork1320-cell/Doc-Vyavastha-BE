@@ -11,12 +11,10 @@ import (
 	"log/slog"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/thinkparq/edconsultancy-be/internal/db/public"
-	"github.com/thinkparq/edconsultancy-be/internal/db/tenant"
 	"github.com/thinkparq/edconsultancy-be/internal/tenancy"
 )
 
@@ -29,6 +27,24 @@ const (
 // Run seeds demo data idempotently.
 func Run(ctx context.Context, pool *pgxpool.Pool, tm *tenancy.Manager, logger *slog.Logger) error {
 	q := public.New(pool)
+
+	// ── Super Admin user (get-or-create) ──
+	superAdminEmail := "admin@docvyavastha.com"
+	_, err := q.GetUserByEmail(ctx, superAdminEmail)
+	if errors.Is(err, pgx.ErrNoRows) {
+		hash, herr := bcrypt.GenerateFromPassword([]byte("admin"), bcrypt.DefaultCost)
+		if herr != nil {
+			return herr
+		}
+		hs := string(hash)
+		_, err = q.CreateUser(ctx, public.CreateUserParams{Email: superAdminEmail, PasswordHash: &hs, IsActive: true, IsVerified: true, IsSuperadmin: true})
+		if err == nil {
+			logger.Info("seed: created super admin", "email", superAdminEmail)
+		}
+	}
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return err
+	}
 
 	// ── Admin user (get-or-create) ──
 	u, err := q.GetUserByEmail(ctx, demoEmail)
@@ -56,18 +72,26 @@ func Run(ctx context.Context, pool *pgxpool.Pool, tm *tenancy.Manager, logger *s
 		return err
 	}
 
+	// ── Master Document Types (only if none) ──
+	if err := insertIfEmpty(ctx, pool, "document_types", `
+        INSERT INTO document_types (name, description, is_active)
+        VALUES ('Aadhaar Card', 'Indian Aadhaar Identity Card', TRUE),
+               ('PAN Card', 'Permanent Account Number Card', TRUE),
+               ('Passport', 'International Travel Passport', TRUE),
+               ('Bank Statement', 'Bank Account Statement', TRUE),
+               ('ITR', 'Income Tax Return', TRUE),
+               ('Photo', 'Passport Size Photograph', TRUE),
+               ('Other', 'Other Documents', TRUE)`); err != nil {
+		return err
+	}
+
 	// ⚡️ Page catalog (insert missing pages idempotently) ⚡️
 	if _, err := pool.Exec(ctx, `
         INSERT INTO pages (page_name, route_url, display_order)
         SELECT v.page_name, v.route_url, CAST(v.display_order AS INT)
         FROM (VALUES
-            ('Dashboard','/dashboard',1), ('Students','/students',2),
-            ('Student Applications','/student-applications',3), ('Student Categories','/student-categories',4),
-            ('Code Configurations','/student-code-configurations',5), ('Code Sequences','/student-code-sequences',6),
-            ('Application Types','/application-types',7), ('Application Statuses','/application-statuses',8),
-            ('Fee Types','/fee-types',9), ('Teams','/teams',10), ('Subscription','/subscription',11),
-            ('Support','/support',12), ('My Profile','/my-profile',13), ('Settings','/settings',14),
-            ('Fee Plans','/fee-plans',15), ('Payments','/payments',16)
+            ('Dashboard','/dashboard',1), ('Teams','/teams',10), ('Subscription','/subscription',11),
+            ('Support','/support',12), ('My Profile','/my-profile',13), ('Settings','/settings',14)
         ) AS v(page_name, route_url, display_order)
         WHERE NOT EXISTS (
             SELECT 1 FROM pages p WHERE p.route_url = v.route_url
@@ -94,6 +118,7 @@ func Run(ctx context.Context, pool *pgxpool.Pool, tm *tenancy.Manager, logger *s
 	if _, err := pool.Exec(ctx, `
         INSERT INTO role_page_permissions (role_id, page_id, can_view, can_add, can_edit, can_delete)
         SELECT $1, page_id, TRUE, TRUE, TRUE, FALSE FROM pages
+        WHERE route_url IN ('/dashboard', '/dashboard/clients', '/dashboard/applications')
         ON CONFLICT (role_id, page_id) DO NOTHING`, roleStaff.RoleID); err != nil {
 		return err
 	}
@@ -106,6 +131,19 @@ func Run(ctx context.Context, pool *pgxpool.Pool, tm *tenancy.Manager, logger *s
         INSERT INTO role_page_permissions (role_id, page_id, can_view, can_add, can_edit, can_delete)
         SELECT $1, page_id, TRUE, FALSE, FALSE, FALSE FROM pages
         ON CONFLICT (role_id, page_id) DO NOTHING`, roleViewer.RoleID); err != nil {
+		return err
+	}
+
+	// ── Client role (for personal accounts) ──
+	roleClient, err := q.EnsureRole(ctx, "Client")
+	if err != nil {
+		return err
+	}
+	if _, err := pool.Exec(ctx, `
+        INSERT INTO role_page_permissions (role_id, page_id, can_view, can_add, can_edit, can_delete)
+        SELECT $1, page_id, TRUE, TRUE, TRUE, FALSE FROM pages
+        WHERE route_url IN ('/dashboard', '/my-profile', '/settings', '/support')
+        ON CONFLICT (role_id, page_id) DO NOTHING`, roleClient.RoleID); err != nil {
 		return err
 	}
 
@@ -129,62 +167,6 @@ func Run(ctx context.Context, pool *pgxpool.Pool, tm *tenancy.Manager, logger *s
 	// ── Membership (upsert) ──
 	if _, err := q.AddUserToTenant(ctx, public.AddUserToTenantParams{
 		UserID: u.ID, TenantID: tenantID, RoleID: &role.RoleID, Status: "Active", IsOwner: true,
-	}); err != nil {
-		return err
-	}
-
-	// ── Tenant-schema lookup data (only if not already seeded) ──
-	if err := tm.InTenantTx(ctx, schemaName, func(tq *tenant.Queries) error {
-		n, err := tq.CountStudentCategories(ctx, "")
-		if err != nil {
-			return err
-		}
-		if n > 0 {
-			return nil // already seeded
-		}
-		var first tenant.StudentCategory
-		for i, name := range []string{"A Group", "Commerce", "Diploma", "Scholarship Only"} {
-			c, err := tq.CreateStudentCategory(ctx, tenant.CreateStudentCategoryParams{Name: name, Status: "Active"})
-			if err != nil {
-				return err
-			}
-			if i == 0 {
-				first = c
-			}
-		}
-		if _, err := tq.CreateStudentCodeConfig(ctx, tenant.CreateStudentCodeConfigParams{
-			CategoryID: first.ID, BusinessYear: 2026, Prefix: "A", Separator: "-", PaddingLength: 4, ResetSequence: true, IsActive: true,
-		}); err != nil {
-			return err
-		}
-		for _, name := range []string{"ACPC", "GUJCET", "JEE", "NEET", "Scholarship"} {
-			if _, err := tq.CreateApplicationType(ctx, tenant.CreateApplicationTypeParams{Name: name, Status: "Active"}); err != nil {
-				return err
-			}
-		}
-		statuses := []struct {
-			name  string
-			order int32
-			color string
-		}{{"Pending", 1, "#f59e0b"}, {"In Progress", 2, "#3b82f6"}, {"Completed", 3, "#10b981"}, {"Rejected", 4, "#ef4444"}, {"Hold", 5, "#6b7280"}}
-		for _, s := range statuses {
-			color := s.color
-			if _, err := tq.CreateApplicationStatus(ctx, tenant.CreateApplicationStatusParams{
-				Name: s.name, ColorCode: &color, Status: "Active", DisplayOrder: s.order,
-			}); err != nil {
-				return err
-			}
-		}
-		var zeroAmount pgtype.Numeric
-		if err := zeroAmount.Scan("0"); err != nil {
-			return err
-		}
-		for _, name := range []string{"Tuition Fee", "Exam Fee", "Hostel Fee"} {
-			if _, err := tq.CreateFeeType(ctx, tenant.CreateFeeTypeParams{Name: name, Amount: zeroAmount, Status: "Active"}); err != nil {
-				return err
-			}
-		}
-		return nil
 	}); err != nil {
 		return err
 	}

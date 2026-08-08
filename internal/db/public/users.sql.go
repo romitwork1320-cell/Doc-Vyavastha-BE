@@ -32,9 +32,9 @@ func (q *Queries) CountTenantUsers(ctx context.Context, arg CountTenantUsersPara
 }
 
 const createUser = `-- name: CreateUser :one
-INSERT INTO users (email, password_hash, google_id, is_active, is_verified)
-VALUES (lower($1), $2, $3, $4, $5)
-RETURNING id, email, password_hash, google_id, is_active, is_verified, last_login_at, created_at, updated_at, deleted_at
+INSERT INTO users (email, password_hash, google_id, is_active, is_verified, is_superadmin)
+VALUES (lower($1), $2, $3, $4, $5, COALESCE($6, FALSE))
+RETURNING id, email, password_hash, google_id, is_active, is_verified, last_login_at, created_at, updated_at, deleted_at, user_type, is_superadmin
 `
 
 type CreateUserParams struct {
@@ -43,6 +43,7 @@ type CreateUserParams struct {
 	GoogleID     *string
 	IsActive     bool
 	IsVerified   bool
+	IsSuperadmin interface{}
 }
 
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
@@ -52,6 +53,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		arg.GoogleID,
 		arg.IsActive,
 		arg.IsVerified,
+		arg.IsSuperadmin,
 	)
 	var i User
 	err := row.Scan(
@@ -65,6 +67,8 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.UserType,
+		&i.IsSuperadmin,
 	)
 	return i, err
 }
@@ -117,7 +121,7 @@ func (q *Queries) GetTenantUser(ctx context.Context, arg GetTenantUserParams) (G
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, email, password_hash, google_id, is_active, is_verified, last_login_at, created_at, updated_at, deleted_at FROM users WHERE lower(email) = lower($1) AND deleted_at IS NULL
+SELECT id, email, password_hash, google_id, is_active, is_verified, last_login_at, created_at, updated_at, deleted_at, user_type, is_superadmin FROM users WHERE lower(email) = lower($1) AND deleted_at IS NULL
 `
 
 func (q *Queries) GetUserByEmail(ctx context.Context, lower string) (User, error) {
@@ -134,12 +138,14 @@ func (q *Queries) GetUserByEmail(ctx context.Context, lower string) (User, error
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.UserType,
+		&i.IsSuperadmin,
 	)
 	return i, err
 }
 
 const getUserByGoogleID = `-- name: GetUserByGoogleID :one
-SELECT id, email, password_hash, google_id, is_active, is_verified, last_login_at, created_at, updated_at, deleted_at FROM users WHERE google_id = $1 AND deleted_at IS NULL
+SELECT id, email, password_hash, google_id, is_active, is_verified, last_login_at, created_at, updated_at, deleted_at, user_type, is_superadmin FROM users WHERE google_id = $1 AND deleted_at IS NULL
 `
 
 func (q *Queries) GetUserByGoogleID(ctx context.Context, googleID *string) (User, error) {
@@ -156,12 +162,14 @@ func (q *Queries) GetUserByGoogleID(ctx context.Context, googleID *string) (User
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.UserType,
+		&i.IsSuperadmin,
 	)
 	return i, err
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, email, password_hash, google_id, is_active, is_verified, last_login_at, created_at, updated_at, deleted_at FROM users WHERE id = $1 AND deleted_at IS NULL
+SELECT id, email, password_hash, google_id, is_active, is_verified, last_login_at, created_at, updated_at, deleted_at, user_type, is_superadmin FROM users WHERE id = $1 AND deleted_at IS NULL
 `
 
 func (q *Queries) GetUserByID(ctx context.Context, id int64) (User, error) {
@@ -178,6 +186,8 @@ func (q *Queries) GetUserByID(ctx context.Context, id int64) (User, error) {
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.UserType,
+		&i.IsSuperadmin,
 	)
 	return i, err
 }

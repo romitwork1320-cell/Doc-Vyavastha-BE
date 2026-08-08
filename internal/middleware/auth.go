@@ -81,7 +81,15 @@ func (a *Auth) RequireTenant(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
+		
+		id, ok := reqctx.Get(r.Context())
+		if ok && strings.EqualFold(id.Role, "SuperAdmin") {
+			next.ServeHTTP(w, r)
+			return
+		}
+		
 		if reqctx.Schema(r.Context()) == "" {
+			a.logger.ErrorContext(r.Context(), "RequireTenant failed", "id", id, "ok", ok, "url", r.URL.String())
 			apiresp.Forbidden(w, "No tenant selected")
 			return
 		}
@@ -125,13 +133,19 @@ func (a *Auth) RequireBranch(next http.Handler) http.Handler {
 
 func bearer(r *http.Request) string {
 	h := r.Header.Get("Authorization")
-	if h == "" {
-		return ""
+	if h != "" {
+		const p = "Bearer "
+		if len(h) > len(p) && strings.EqualFold(h[:len(p)], p) {
+			return strings.TrimSpace(h[len(p):])
+		}
 	}
-	const p = "Bearer "
-	if len(h) > len(p) && strings.EqualFold(h[:len(p)], p) {
-		return strings.TrimSpace(h[len(p):])
+	
+	// Fallback to query parameter for streaming endpoints (e.g. iframes)
+	q := r.URL.Query().Get("access_token")
+	if q != "" {
+		return q
 	}
+	
 	return ""
 }
 
@@ -143,10 +157,13 @@ func (a *Auth) RequirePermission(resource string, action string) func(http.Handl
 				next.ServeHTTP(w, r)
 				return
 			}
-			id, _ := reqctx.Get(r.Context())
+			id, ok := reqctx.Get(r.Context())
+			if !ok {
+				apiresp.Unauthorized(w, "Authentication required")
+				return
+			}
 			
-			// Super Admin Bypass
-			if id.Role == "Admin" || id.Role == "Owner" {
+			if strings.EqualFold(id.Role, "SuperAdmin") || strings.EqualFold(id.Role, "Admin") {
 				next.ServeHTTP(w, r)
 				return
 			}

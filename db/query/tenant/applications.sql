@@ -1,126 +1,165 @@
--- name: ListStudentApplications :many
-SELECT a.* FROM student_applications a
-WHERE a.deleted_at IS NULL
-  AND a.branch_id = sqlc.arg(branch_id)
-  AND (sqlc.arg(filter)::text = ''
-       OR a.application_name ILIKE '%'||sqlc.arg(filter)||'%'
-       OR a.application_number ILIKE '%'||sqlc.arg(filter)||'%'
-       OR EXISTS (
-           SELECT 1 FROM student_application_colleges sac 
-           JOIN colleges c ON sac.college_id = c.id
-           WHERE sac.application_id = a.id AND c.name ILIKE '%'||sqlc.arg(filter)||'%'
-       ))
-ORDER BY a.created_at DESC
-LIMIT sqlc.arg(lim) OFFSET sqlc.arg(off);
+-- name: CreateApplication :one
+INSERT INTO applications (
+    client_id, title, status
+) VALUES (
+    $1, $2, 'OPEN'
+) RETURNING *;
 
--- name: CountStudentApplications :one
-SELECT count(*) FROM student_applications a
-WHERE a.deleted_at IS NULL
-  AND a.branch_id = sqlc.arg(branch_id)
-  AND (sqlc.arg(filter)::text = ''
-       OR a.application_name ILIKE '%'||sqlc.arg(filter)||'%'
-       OR a.application_number ILIKE '%'||sqlc.arg(filter)||'%'
-       OR EXISTS (
-           SELECT 1 FROM student_application_colleges sac 
-           JOIN colleges c ON sac.college_id = c.id
-           WHERE sac.application_id = a.id AND c.name ILIKE '%'||sqlc.arg(filter)||'%'
-       ));
+-- name: UpdateApplicationStatus :one
+UPDATE applications
+SET status = $2, updated_at = now()
+WHERE id = $1
+RETURNING *;
 
--- name: GetStudentApplication :one
-SELECT * FROM student_applications WHERE id = $1 AND deleted_at IS NULL;
+-- name: SetMagicLinkToken :one
+UPDATE applications
+SET magic_link_token = $2, magic_link_expires_at = $3, updated_at = now()
+WHERE id = $1
+RETURNING *;
 
--- name: GetApplicationsByStudent :many
-SELECT * FROM student_applications
-WHERE student_id = $1 AND branch_id = $2 AND deleted_at IS NULL
+-- name: GetApplicationByID :one
+SELECT * FROM applications
+WHERE id = $1;
+
+-- name: ListApplicationsByClient :many
+SELECT * FROM applications
+WHERE client_id = $1 AND deleted_at IS NULL
 ORDER BY created_at DESC;
 
--- name: CreateStudentApplication :one
-INSERT INTO student_applications (
-    student_id, branch_id, application_type_id, application_status_id,
-    application_number, application_name, last_date, applied_date, submitted_date,
-    form_type_id, portal_username, portal_password, remarks, created_by, updated_by
+-- name: ListApplications :many
+SELECT * FROM applications
+WHERE deleted_at IS NULL
+ORDER BY created_at DESC;
+
+-- name: CreateApplicationRequirement :one
+INSERT INTO application_requirements (
+    application_id, document_type_id, document_name, description, status, display_order, is_required
 ) VALUES (
-    sqlc.arg(student_id), sqlc.arg(branch_id), sqlc.arg(application_type_id), sqlc.arg(application_status_id),
-    sqlc.arg(application_number), sqlc.arg(application_name), sqlc.arg(last_date), sqlc.arg(applied_date), sqlc.arg(submitted_date),
-    sqlc.arg(form_type_id), sqlc.arg(portal_username), sqlc.arg(portal_password), sqlc.arg(remarks), sqlc.arg(created_by), sqlc.arg(updated_by)
-)
+    $1, $2, $3, $4, 'PENDING', $5, $6
+) RETURNING *;
+
+-- name: GetApplicationRequirements :many
+SELECT * FROM application_requirements
+WHERE application_id = $1
+ORDER BY display_order ASC;
+
+-- name: GetApplicationRequirementByID :one
+SELECT * FROM application_requirements
+WHERE id = $1;
+
+-- name: UpdateRequirementStatus :one
+UPDATE application_requirements
+SET status = $2, rejection_reason = $3, updated_at = now()
+WHERE id = $1
 RETURNING *;
 
--- name: UpdateStudentApplication :one
-UPDATE student_applications SET
-    application_type_id = sqlc.arg(application_type_id),
-    application_status_id = sqlc.arg(application_status_id),
-    application_number = sqlc.arg(application_number),
-    application_name = sqlc.arg(application_name),
-    last_date = sqlc.arg(last_date),
-    applied_date = sqlc.arg(applied_date),
-    submitted_date = sqlc.arg(submitted_date),
-    form_type_id = sqlc.arg(form_type_id),
-    portal_username = sqlc.arg(portal_username),
-    portal_password = sqlc.arg(portal_password),
-    remarks = sqlc.arg(remarks),
-    updated_by = sqlc.arg(updated_by),
-    updated_at = now()
-WHERE id = sqlc.arg(id) AND deleted_at IS NULL
+-- name: CreateApplicationDocumentVersion :one
+INSERT INTO application_document_versions (
+    requirement_id, version_number, uploaded_by_client
+) VALUES (
+    $1, $2, $3
+) RETURNING *;
+
+-- name: CreateRequirementVersionFile :one
+INSERT INTO application_document_version_files (
+    version_id, file_url, document_name, client_document_id
+) VALUES (
+    $1, $2, $3, $4
+) RETURNING *;
+
+-- name: GetDocumentVersionsByRequirement :many
+SELECT * FROM application_document_versions
+WHERE requirement_id = $1
+ORDER BY created_at DESC;
+
+-- name: UpdateVersionFileClientDocumentID :exec
+UPDATE application_document_version_files
+SET client_document_id = $2
+WHERE id = $1;
+
+-- name: GetDocumentVersionByID :one
+SELECT * FROM application_document_versions
+WHERE id = $1;
+
+-- name: GetVersionFilesByVersionID :many
+SELECT * FROM application_document_version_files
+WHERE version_id = $1
+ORDER BY created_at ASC;
+
+-- name: GetVersionFileByID :one
+SELECT * FROM application_document_version_files
+WHERE id = $1;
+
+-- name: GetLatestDocumentVersionNumber :one
+SELECT COALESCE(MAX(version_number), 0)::int FROM application_document_versions
+WHERE requirement_id = $1;
+
+-- name: SetFinalDeliverable :one
+UPDATE applications
+SET final_deliverable_id = $2, updated_at = now()
+WHERE id = $1
 RETURNING *;
 
--- name: SoftDeleteStudentApplication :execrows
-UPDATE student_applications SET deleted_at = now(), deleted_by = sqlc.arg(deleted_by) WHERE id = sqlc.arg(id) AND deleted_at IS NULL;
--- name: CountApplicationsByStatus :many
-SELECT s.name AS status_name, count(a.id) AS total
-FROM application_statuses s
-LEFT JOIN student_applications a
-       ON a.application_status_id = s.id AND a.deleted_at IS NULL
-GROUP BY s.name
-ORDER BY s.name;
+-- name: ArchiveApplication :one
+UPDATE applications
+SET archived_at = now(), archived_by = $2, updated_at = now()
+WHERE id = $1
+RETURNING *;
 
--- name: NextAppSequence :one
-SELECT nextval('app_seq')::bigint AS seq;
+-- name: RestoreApplication :one
+UPDATE applications
+SET archived_at = NULL, archived_by = NULL, updated_at = now()
+WHERE id = $1
+RETURNING *;
 
+-- name: SoftDeleteApplication :one
+UPDATE applications
+SET deleted_at = now(), deleted_by = $2, updated_at = now()
+WHERE id = $1
+RETURNING *;
 
--- name: ExportStudentApplications :many
-SELECT 
-    a.*,
-    s.student_code,
-    s.full_name AS student_name,
-    t.name AS application_type_name,
-    st.name AS application_status_name,
-    f.name AS form_type_name
-FROM student_applications a
-JOIN students s ON s.id = a.student_id
-LEFT JOIN application_types t ON t.id = a.application_type_id
-LEFT JOIN application_statuses st ON st.id = a.application_status_id
-LEFT JOIN form_types f ON f.id = a.form_type_id
-WHERE a.deleted_at IS NULL
-  AND (sqlc.arg(filter)::text = ''
-       OR a.application_name ILIKE '%'||sqlc.arg(filter)||'%'
-       OR a.application_number ILIKE '%'||sqlc.arg(filter)||'%'
-       OR EXISTS (
-           SELECT 1 FROM student_application_colleges sac 
-           JOIN colleges c ON sac.college_id = c.id
-           WHERE sac.application_id = a.id AND c.name ILIKE '%'||sqlc.arg(filter)||'%'
-       ))
-ORDER BY a.created_at DESC;
+-- name: AddApplicationDeliverable :one
+INSERT INTO application_deliverables (
+  application_id, client_document_id, uploaded_by_user_id
+) VALUES (
+  $1, $2, $3
+) RETURNING *;
 
--- name: ClearStudentApplicationColleges :exec
-DELETE FROM student_application_colleges WHERE application_id = $1;
+-- name: GetApplicationDeliverables :many
+SELECT * FROM application_deliverables
+WHERE application_id = $1
+ORDER BY created_at DESC;
 
--- name: AddStudentApplicationCollege :exec
-INSERT INTO student_application_colleges (application_id, college_id) VALUES ($1, $2);
+-- name: GetApplicationDeliverableByID :one
+SELECT * FROM application_deliverables
+WHERE id = $1;
 
--- name: GetCollegesForApplication :many
-SELECT c.* FROM colleges c
-JOIN student_application_colleges sac ON sac.college_id = c.id
-WHERE sac.application_id = $1
-ORDER BY c.name;
+-- name: UpdateApplicationTitle :one
+UPDATE applications
+SET title = $2, updated_at = now()
+WHERE id = $1
+RETURNING *;
 
--- name: GetCollegesForApplications :many
-SELECT sac.application_id, c.id, c.name 
-FROM colleges c
-JOIN student_application_colleges sac ON sac.college_id = c.id
-WHERE sac.application_id = ANY(sqlc.arg(application_ids)::uuid[])
-ORDER BY c.name;
+-- name: CreateTimelineEvent :one
+INSERT INTO application_timeline (
+    application_id, event_type, actor_type, actor_id, description, metadata
+) VALUES (
+    $1, $2, $3, $4, $5, $6
+) RETURNING *;
 
--- name: GetApplicationsByStudentsAndType :many
-SELECT * FROM student_applications 
-WHERE application_type_id = $1 AND student_id = ANY(sqlc.arg(student_ids)::uuid[]) AND deleted_at IS NULL;
+-- name: ListTimelineEvents :many
+SELECT * FROM application_timeline
+WHERE application_id = $1
+ORDER BY created_at DESC;
+
+-- name: CreateRequirementReview :one
+INSERT INTO application_requirement_reviews (
+    requirement_id, reviewer_id, reviewer_type, reviewer_name, status, comment
+) VALUES (
+    $1, $2, $3, $4, $5, $6
+) RETURNING *;
+
+-- name: GetRequirementReviews :many
+SELECT * FROM application_requirement_reviews
+WHERE requirement_id = $1
+ORDER BY created_at DESC;

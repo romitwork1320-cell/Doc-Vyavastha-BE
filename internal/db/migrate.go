@@ -162,6 +162,7 @@ func MigrateAllTenants(ctx context.Context, pool *pgxpool.Pool) error {
 		if !schemaNameRe.MatchString(s) {
 			continue // skip placeholder/temp schemas
 		}
+		
 		if err := ProvisionTenantSchema(ctx, pool, s); err != nil {
 			return fmt.Errorf("tenant %s: %w", s, err)
 		}

@@ -1,0 +1,2 @@
+ALTER TABLE application_document_version_files
+ADD COLUMN client_document_id BIGINT;

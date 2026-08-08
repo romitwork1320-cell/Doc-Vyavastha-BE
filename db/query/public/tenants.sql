@@ -27,8 +27,8 @@ SELECT * FROM tenants WHERE tenant_id = $1;
 SELECT * FROM tenants WHERE schema_name = $1;
 
 -- name: CreateTenant :one
-INSERT INTO tenants (tenant_name, company_name, schema_name, tenant_code, contact_phone, contact_email, created_by)
-VALUES (sqlc.arg(tenant_name), sqlc.arg(company_name), sqlc.arg(schema_name), sqlc.arg(tenant_code), sqlc.arg(contact_phone), sqlc.arg(contact_email), sqlc.arg(created_by))
+INSERT INTO tenants (tenant_name, company_name, schema_name, tenant_code, contact_phone, contact_email, org_type, organization_type_id, created_by)
+VALUES (sqlc.arg(tenant_name), sqlc.arg(company_name), sqlc.arg(schema_name), sqlc.arg(tenant_code), sqlc.arg(contact_phone), sqlc.arg(contact_email), sqlc.arg(org_type), sqlc.arg(organization_type_id), sqlc.arg(created_by))
 RETURNING *;
 
 -- name: UpdateTenantStatus :exec

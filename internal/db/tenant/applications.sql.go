@@ -12,304 +12,349 @@ import (
 	"github.com/google/uuid"
 )
 
-const addStudentApplicationCollege = `-- name: AddStudentApplicationCollege :exec
-INSERT INTO student_application_colleges (application_id, college_id) VALUES ($1, $2)
-`
-
-type AddStudentApplicationCollegeParams struct {
-	ApplicationID uuid.UUID
-	CollegeID     uuid.UUID
-}
-
-func (q *Queries) AddStudentApplicationCollege(ctx context.Context, arg AddStudentApplicationCollegeParams) error {
-	_, err := q.db.Exec(ctx, addStudentApplicationCollege, arg.ApplicationID, arg.CollegeID)
-	return err
-}
-
-const clearStudentApplicationColleges = `-- name: ClearStudentApplicationColleges :exec
-DELETE FROM student_application_colleges WHERE application_id = $1
-`
-
-func (q *Queries) ClearStudentApplicationColleges(ctx context.Context, applicationID uuid.UUID) error {
-	_, err := q.db.Exec(ctx, clearStudentApplicationColleges, applicationID)
-	return err
-}
-
-const countApplicationsByStatus = `-- name: CountApplicationsByStatus :many
-SELECT s.name AS status_name, count(a.id) AS total
-FROM application_statuses s
-LEFT JOIN student_applications a
-       ON a.application_status_id = s.id AND a.deleted_at IS NULL
-GROUP BY s.name
-ORDER BY s.name
-`
-
-type CountApplicationsByStatusRow struct {
-	StatusName string
-	Total      int64
-}
-
-func (q *Queries) CountApplicationsByStatus(ctx context.Context) ([]CountApplicationsByStatusRow, error) {
-	rows, err := q.db.Query(ctx, countApplicationsByStatus)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []CountApplicationsByStatusRow{}
-	for rows.Next() {
-		var i CountApplicationsByStatusRow
-		if err := rows.Scan(&i.StatusName, &i.Total); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const countStudentApplications = `-- name: CountStudentApplications :one
-SELECT count(*) FROM student_applications a
-WHERE a.deleted_at IS NULL
-  AND a.branch_id = $1
-  AND ($2::text = ''
-       OR a.application_name ILIKE '%'||$2||'%'
-       OR a.application_number ILIKE '%'||$2||'%'
-       OR EXISTS (
-           SELECT 1 FROM student_application_colleges sac 
-           JOIN colleges c ON sac.college_id = c.id
-           WHERE sac.application_id = a.id AND c.name ILIKE '%'||$2||'%'
-       ))
-`
-
-type CountStudentApplicationsParams struct {
-	BranchID uuid.UUID
-	Filter   string
-}
-
-func (q *Queries) CountStudentApplications(ctx context.Context, arg CountStudentApplicationsParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countStudentApplications, arg.BranchID, arg.Filter)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
-const createStudentApplication = `-- name: CreateStudentApplication :one
-INSERT INTO student_applications (
-    student_id, branch_id, application_type_id, application_status_id,
-    application_number, application_name, last_date, applied_date, submitted_date,
-    form_type_id, portal_username, portal_password, remarks, created_by, updated_by
+const addApplicationDeliverable = `-- name: AddApplicationDeliverable :one
+INSERT INTO application_deliverables (
+  application_id, client_document_id, uploaded_by_user_id
 ) VALUES (
-    $1, $2, $3, $4,
-    $5, $6, $7, $8, $9,
-    $10, $11, $12, $13, $14, $15
-)
-RETURNING id, student_id, application_type_id, application_status_id, application_number, application_name, last_date, applied_date, submitted_date, portal_username, portal_password, remarks, created_by, updated_by, created_at, updated_at, deleted_at, deleted_by, form_type_id, branch_id
+  $1, $2, $3
+) RETURNING id, application_id, client_document_id, uploaded_by_user_id, created_at
 `
 
-type CreateStudentApplicationParams struct {
-	StudentID           uuid.UUID
-	BranchID            uuid.UUID
-	ApplicationTypeID   uuid.UUID
-	ApplicationStatusID uuid.UUID
-	ApplicationNumber   *string
-	ApplicationName     *string
-	LastDate            *time.Time
-	AppliedDate         *time.Time
-	SubmittedDate       *time.Time
-	FormTypeID          *uuid.UUID
-	PortalUsername      *string
-	PortalPassword      *string
-	Remarks             *string
-	CreatedBy           *int64
-	UpdatedBy           *int64
+type AddApplicationDeliverableParams struct {
+	ApplicationID    int64
+	ClientDocumentID int64
+	UploadedByUserID *int64
 }
 
-func (q *Queries) CreateStudentApplication(ctx context.Context, arg CreateStudentApplicationParams) (StudentApplication, error) {
-	row := q.db.QueryRow(ctx, createStudentApplication,
-		arg.StudentID,
-		arg.BranchID,
-		arg.ApplicationTypeID,
-		arg.ApplicationStatusID,
-		arg.ApplicationNumber,
-		arg.ApplicationName,
-		arg.LastDate,
-		arg.AppliedDate,
-		arg.SubmittedDate,
-		arg.FormTypeID,
-		arg.PortalUsername,
-		arg.PortalPassword,
-		arg.Remarks,
-		arg.CreatedBy,
-		arg.UpdatedBy,
-	)
-	var i StudentApplication
+func (q *Queries) AddApplicationDeliverable(ctx context.Context, arg AddApplicationDeliverableParams) (ApplicationDeliverable, error) {
+	row := q.db.QueryRow(ctx, addApplicationDeliverable, arg.ApplicationID, arg.ClientDocumentID, arg.UploadedByUserID)
+	var i ApplicationDeliverable
 	err := row.Scan(
 		&i.ID,
-		&i.StudentID,
-		&i.ApplicationTypeID,
-		&i.ApplicationStatusID,
-		&i.ApplicationNumber,
-		&i.ApplicationName,
-		&i.LastDate,
-		&i.AppliedDate,
-		&i.SubmittedDate,
-		&i.PortalUsername,
-		&i.PortalPassword,
-		&i.Remarks,
-		&i.CreatedBy,
-		&i.UpdatedBy,
+		&i.ApplicationID,
+		&i.ClientDocumentID,
+		&i.UploadedByUserID,
 		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.DeletedBy,
-		&i.FormTypeID,
-		&i.BranchID,
 	)
 	return i, err
 }
 
-const exportStudentApplications = `-- name: ExportStudentApplications :many
-SELECT 
-    a.id, a.student_id, a.application_type_id, a.application_status_id, a.application_number, a.application_name, a.last_date, a.applied_date, a.submitted_date, a.portal_username, a.portal_password, a.remarks, a.created_by, a.updated_by, a.created_at, a.updated_at, a.deleted_at, a.deleted_by, a.form_type_id, a.branch_id,
-    s.student_code,
-    s.full_name AS student_name,
-    t.name AS application_type_name,
-    st.name AS application_status_name,
-    f.name AS form_type_name
-FROM student_applications a
-JOIN students s ON s.id = a.student_id
-LEFT JOIN application_types t ON t.id = a.application_type_id
-LEFT JOIN application_statuses st ON st.id = a.application_status_id
-LEFT JOIN form_types f ON f.id = a.form_type_id
-WHERE a.deleted_at IS NULL
-  AND ($1::text = ''
-       OR a.application_name ILIKE '%'||$1||'%'
-       OR a.application_number ILIKE '%'||$1||'%'
-       OR EXISTS (
-           SELECT 1 FROM student_application_colleges sac 
-           JOIN colleges c ON sac.college_id = c.id
-           WHERE sac.application_id = a.id AND c.name ILIKE '%'||$1||'%'
-       ))
-ORDER BY a.created_at DESC
+const archiveApplication = `-- name: ArchiveApplication :one
+UPDATE applications
+SET archived_at = now(), archived_by = $2, updated_at = now()
+WHERE id = $1
+RETURNING id, client_id, title, status, created_at, updated_at, magic_link_token, magic_link_expires_at, final_deliverable_id, archived_at, archived_by, deleted_at, deleted_by
 `
 
-type ExportStudentApplicationsRow struct {
-	ID                    uuid.UUID
-	StudentID             uuid.UUID
-	ApplicationTypeID     uuid.UUID
-	ApplicationStatusID   uuid.UUID
-	ApplicationNumber     *string
-	ApplicationName       *string
-	LastDate              *time.Time
-	AppliedDate           *time.Time
-	SubmittedDate         *time.Time
-	PortalUsername        *string
-	PortalPassword        *string
-	Remarks               *string
-	CreatedBy             *int64
-	UpdatedBy             *int64
-	CreatedAt             time.Time
-	UpdatedAt             time.Time
-	DeletedAt             *time.Time
-	DeletedBy             *int64
-	FormTypeID            *uuid.UUID
-	BranchID              uuid.UUID
-	StudentCode           string
-	StudentName           string
-	ApplicationTypeName   *string
-	ApplicationStatusName *string
-	FormTypeName          *string
+type ArchiveApplicationParams struct {
+	ID         int64
+	ArchivedBy *int64
 }
 
-func (q *Queries) ExportStudentApplications(ctx context.Context, filter string) ([]ExportStudentApplicationsRow, error) {
-	rows, err := q.db.Query(ctx, exportStudentApplications, filter)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ExportStudentApplicationsRow{}
-	for rows.Next() {
-		var i ExportStudentApplicationsRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.StudentID,
-			&i.ApplicationTypeID,
-			&i.ApplicationStatusID,
-			&i.ApplicationNumber,
-			&i.ApplicationName,
-			&i.LastDate,
-			&i.AppliedDate,
-			&i.SubmittedDate,
-			&i.PortalUsername,
-			&i.PortalPassword,
-			&i.Remarks,
-			&i.CreatedBy,
-			&i.UpdatedBy,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
-			&i.DeletedBy,
-			&i.FormTypeID,
-			&i.BranchID,
-			&i.StudentCode,
-			&i.StudentName,
-			&i.ApplicationTypeName,
-			&i.ApplicationStatusName,
-			&i.FormTypeName,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
+func (q *Queries) ArchiveApplication(ctx context.Context, arg ArchiveApplicationParams) (Application, error) {
+	row := q.db.QueryRow(ctx, archiveApplication, arg.ID, arg.ArchivedBy)
+	var i Application
+	err := row.Scan(
+		&i.ID,
+		&i.ClientID,
+		&i.Title,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.MagicLinkToken,
+		&i.MagicLinkExpiresAt,
+		&i.FinalDeliverableID,
+		&i.ArchivedAt,
+		&i.ArchivedBy,
+		&i.DeletedAt,
+		&i.DeletedBy,
+	)
+	return i, err
 }
 
-const getApplicationsByStudent = `-- name: GetApplicationsByStudent :many
-SELECT id, student_id, application_type_id, application_status_id, application_number, application_name, last_date, applied_date, submitted_date, portal_username, portal_password, remarks, created_by, updated_by, created_at, updated_at, deleted_at, deleted_by, form_type_id, branch_id FROM student_applications
-WHERE student_id = $1 AND branch_id = $2 AND deleted_at IS NULL
+const createApplication = `-- name: CreateApplication :one
+INSERT INTO applications (
+    client_id, title, status
+) VALUES (
+    $1, $2, 'OPEN'
+) RETURNING id, client_id, title, status, created_at, updated_at, magic_link_token, magic_link_expires_at, final_deliverable_id, archived_at, archived_by, deleted_at, deleted_by
+`
+
+type CreateApplicationParams struct {
+	ClientID int64
+	Title    string
+}
+
+func (q *Queries) CreateApplication(ctx context.Context, arg CreateApplicationParams) (Application, error) {
+	row := q.db.QueryRow(ctx, createApplication, arg.ClientID, arg.Title)
+	var i Application
+	err := row.Scan(
+		&i.ID,
+		&i.ClientID,
+		&i.Title,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.MagicLinkToken,
+		&i.MagicLinkExpiresAt,
+		&i.FinalDeliverableID,
+		&i.ArchivedAt,
+		&i.ArchivedBy,
+		&i.DeletedAt,
+		&i.DeletedBy,
+	)
+	return i, err
+}
+
+const createApplicationDocumentVersion = `-- name: CreateApplicationDocumentVersion :one
+INSERT INTO application_document_versions (
+    requirement_id, version_number, uploaded_by_client
+) VALUES (
+    $1, $2, $3
+) RETURNING id, requirement_id, version_number, uploaded_by_client, created_at
+`
+
+type CreateApplicationDocumentVersionParams struct {
+	RequirementID    int64
+	VersionNumber    int32
+	UploadedByClient bool
+}
+
+func (q *Queries) CreateApplicationDocumentVersion(ctx context.Context, arg CreateApplicationDocumentVersionParams) (ApplicationDocumentVersion, error) {
+	row := q.db.QueryRow(ctx, createApplicationDocumentVersion, arg.RequirementID, arg.VersionNumber, arg.UploadedByClient)
+	var i ApplicationDocumentVersion
+	err := row.Scan(
+		&i.ID,
+		&i.RequirementID,
+		&i.VersionNumber,
+		&i.UploadedByClient,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const createApplicationRequirement = `-- name: CreateApplicationRequirement :one
+INSERT INTO application_requirements (
+    application_id, document_type_id, document_name, description, status, display_order, is_required
+) VALUES (
+    $1, $2, $3, $4, 'PENDING', $5, $6
+) RETURNING id, application_id, document_name, description, status, rejection_reason, created_at, updated_at, display_order, is_required, document_type_id
+`
+
+type CreateApplicationRequirementParams struct {
+	ApplicationID  int64
+	DocumentTypeID int64
+	DocumentName   string
+	Description    *string
+	DisplayOrder   int32
+	IsRequired     bool
+}
+
+func (q *Queries) CreateApplicationRequirement(ctx context.Context, arg CreateApplicationRequirementParams) (ApplicationRequirement, error) {
+	row := q.db.QueryRow(ctx, createApplicationRequirement,
+		arg.ApplicationID,
+		arg.DocumentTypeID,
+		arg.DocumentName,
+		arg.Description,
+		arg.DisplayOrder,
+		arg.IsRequired,
+	)
+	var i ApplicationRequirement
+	err := row.Scan(
+		&i.ID,
+		&i.ApplicationID,
+		&i.DocumentName,
+		&i.Description,
+		&i.Status,
+		&i.RejectionReason,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DisplayOrder,
+		&i.IsRequired,
+		&i.DocumentTypeID,
+	)
+	return i, err
+}
+
+const createRequirementReview = `-- name: CreateRequirementReview :one
+INSERT INTO application_requirement_reviews (
+    requirement_id, reviewer_id, reviewer_type, reviewer_name, status, comment
+) VALUES (
+    $1, $2, $3, $4, $5, $6
+) RETURNING id, requirement_id, reviewer_id, reviewer_type, reviewer_name, status, comment, created_at
+`
+
+type CreateRequirementReviewParams struct {
+	RequirementID int64
+	ReviewerID    *int64
+	ReviewerType  string
+	ReviewerName  *string
+	Status        string
+	Comment       *string
+}
+
+func (q *Queries) CreateRequirementReview(ctx context.Context, arg CreateRequirementReviewParams) (ApplicationRequirementReview, error) {
+	row := q.db.QueryRow(ctx, createRequirementReview,
+		arg.RequirementID,
+		arg.ReviewerID,
+		arg.ReviewerType,
+		arg.ReviewerName,
+		arg.Status,
+		arg.Comment,
+	)
+	var i ApplicationRequirementReview
+	err := row.Scan(
+		&i.ID,
+		&i.RequirementID,
+		&i.ReviewerID,
+		&i.ReviewerType,
+		&i.ReviewerName,
+		&i.Status,
+		&i.Comment,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const createRequirementVersionFile = `-- name: CreateRequirementVersionFile :one
+INSERT INTO application_document_version_files (
+    version_id, file_url, document_name, client_document_id
+) VALUES (
+    $1, $2, $3, $4
+) RETURNING id, version_id, file_url, document_name, created_at, client_document_id
+`
+
+type CreateRequirementVersionFileParams struct {
+	VersionID        int64
+	FileUrl          string
+	DocumentName     string
+	ClientDocumentID *int64
+}
+
+func (q *Queries) CreateRequirementVersionFile(ctx context.Context, arg CreateRequirementVersionFileParams) (ApplicationDocumentVersionFile, error) {
+	row := q.db.QueryRow(ctx, createRequirementVersionFile,
+		arg.VersionID,
+		arg.FileUrl,
+		arg.DocumentName,
+		arg.ClientDocumentID,
+	)
+	var i ApplicationDocumentVersionFile
+	err := row.Scan(
+		&i.ID,
+		&i.VersionID,
+		&i.FileUrl,
+		&i.DocumentName,
+		&i.CreatedAt,
+		&i.ClientDocumentID,
+	)
+	return i, err
+}
+
+const createTimelineEvent = `-- name: CreateTimelineEvent :one
+INSERT INTO application_timeline (
+    application_id, event_type, actor_type, actor_id, description, metadata
+) VALUES (
+    $1, $2, $3, $4, $5, $6
+) RETURNING id, application_id, event_type, actor_type, actor_id, description, metadata, created_at
+`
+
+type CreateTimelineEventParams struct {
+	ApplicationID int64
+	EventType     string
+	ActorType     string
+	ActorID       *int64
+	Description   string
+	Metadata      []byte
+}
+
+func (q *Queries) CreateTimelineEvent(ctx context.Context, arg CreateTimelineEventParams) (ApplicationTimeline, error) {
+	row := q.db.QueryRow(ctx, createTimelineEvent,
+		arg.ApplicationID,
+		arg.EventType,
+		arg.ActorType,
+		arg.ActorID,
+		arg.Description,
+		arg.Metadata,
+	)
+	var i ApplicationTimeline
+	err := row.Scan(
+		&i.ID,
+		&i.ApplicationID,
+		&i.EventType,
+		&i.ActorType,
+		&i.ActorID,
+		&i.Description,
+		&i.Metadata,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getApplicationByID = `-- name: GetApplicationByID :one
+SELECT id, client_id, title, status, created_at, updated_at, magic_link_token, magic_link_expires_at, final_deliverable_id, archived_at, archived_by, deleted_at, deleted_by FROM applications
+WHERE id = $1
+`
+
+func (q *Queries) GetApplicationByID(ctx context.Context, id int64) (Application, error) {
+	row := q.db.QueryRow(ctx, getApplicationByID, id)
+	var i Application
+	err := row.Scan(
+		&i.ID,
+		&i.ClientID,
+		&i.Title,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.MagicLinkToken,
+		&i.MagicLinkExpiresAt,
+		&i.FinalDeliverableID,
+		&i.ArchivedAt,
+		&i.ArchivedBy,
+		&i.DeletedAt,
+		&i.DeletedBy,
+	)
+	return i, err
+}
+
+const getApplicationDeliverableByID = `-- name: GetApplicationDeliverableByID :one
+SELECT id, application_id, client_document_id, uploaded_by_user_id, created_at FROM application_deliverables
+WHERE id = $1
+`
+
+func (q *Queries) GetApplicationDeliverableByID(ctx context.Context, id int64) (ApplicationDeliverable, error) {
+	row := q.db.QueryRow(ctx, getApplicationDeliverableByID, id)
+	var i ApplicationDeliverable
+	err := row.Scan(
+		&i.ID,
+		&i.ApplicationID,
+		&i.ClientDocumentID,
+		&i.UploadedByUserID,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getApplicationDeliverables = `-- name: GetApplicationDeliverables :many
+SELECT id, application_id, client_document_id, uploaded_by_user_id, created_at FROM application_deliverables
+WHERE application_id = $1
 ORDER BY created_at DESC
 `
 
-type GetApplicationsByStudentParams struct {
-	StudentID uuid.UUID
-	BranchID  uuid.UUID
-}
-
-func (q *Queries) GetApplicationsByStudent(ctx context.Context, arg GetApplicationsByStudentParams) ([]StudentApplication, error) {
-	rows, err := q.db.Query(ctx, getApplicationsByStudent, arg.StudentID, arg.BranchID)
+func (q *Queries) GetApplicationDeliverables(ctx context.Context, applicationID int64) ([]ApplicationDeliverable, error) {
+	rows, err := q.db.Query(ctx, getApplicationDeliverables, applicationID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []StudentApplication{}
+	items := []ApplicationDeliverable{}
 	for rows.Next() {
-		var i StudentApplication
+		var i ApplicationDeliverable
 		if err := rows.Scan(
 			&i.ID,
-			&i.StudentID,
-			&i.ApplicationTypeID,
-			&i.ApplicationStatusID,
-			&i.ApplicationNumber,
-			&i.ApplicationName,
-			&i.LastDate,
-			&i.AppliedDate,
-			&i.SubmittedDate,
-			&i.PortalUsername,
-			&i.PortalPassword,
-			&i.Remarks,
-			&i.CreatedBy,
-			&i.UpdatedBy,
+			&i.ApplicationID,
+			&i.ClientDocumentID,
+			&i.UploadedByUserID,
 			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
-			&i.DeletedBy,
-			&i.FormTypeID,
-			&i.BranchID,
 		); err != nil {
 			return nil, err
 		}
@@ -321,217 +366,57 @@ func (q *Queries) GetApplicationsByStudent(ctx context.Context, arg GetApplicati
 	return items, nil
 }
 
-const getApplicationsByStudentsAndType = `-- name: GetApplicationsByStudentsAndType :many
-SELECT id, student_id, application_type_id, application_status_id, application_number, application_name, last_date, applied_date, submitted_date, portal_username, portal_password, remarks, created_by, updated_by, created_at, updated_at, deleted_at, deleted_by, form_type_id, branch_id FROM student_applications 
-WHERE application_type_id = $1 AND student_id = ANY($2::uuid[]) AND deleted_at IS NULL
+const getApplicationRequirementByID = `-- name: GetApplicationRequirementByID :one
+SELECT id, application_id, document_name, description, status, rejection_reason, created_at, updated_at, display_order, is_required, document_type_id FROM application_requirements
+WHERE id = $1
 `
 
-type GetApplicationsByStudentsAndTypeParams struct {
-	ApplicationTypeID uuid.UUID
-	StudentIds        []uuid.UUID
-}
-
-func (q *Queries) GetApplicationsByStudentsAndType(ctx context.Context, arg GetApplicationsByStudentsAndTypeParams) ([]StudentApplication, error) {
-	rows, err := q.db.Query(ctx, getApplicationsByStudentsAndType, arg.ApplicationTypeID, arg.StudentIds)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []StudentApplication{}
-	for rows.Next() {
-		var i StudentApplication
-		if err := rows.Scan(
-			&i.ID,
-			&i.StudentID,
-			&i.ApplicationTypeID,
-			&i.ApplicationStatusID,
-			&i.ApplicationNumber,
-			&i.ApplicationName,
-			&i.LastDate,
-			&i.AppliedDate,
-			&i.SubmittedDate,
-			&i.PortalUsername,
-			&i.PortalPassword,
-			&i.Remarks,
-			&i.CreatedBy,
-			&i.UpdatedBy,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
-			&i.DeletedBy,
-			&i.FormTypeID,
-			&i.BranchID,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const getCollegesForApplication = `-- name: GetCollegesForApplication :many
-SELECT c.id, c.tenant_id, c.name, c.created_at, c.updated_at, c.deleted_at, c.created_by, c.updated_by FROM colleges c
-JOIN student_application_colleges sac ON sac.college_id = c.id
-WHERE sac.application_id = $1
-ORDER BY c.name
-`
-
-func (q *Queries) GetCollegesForApplication(ctx context.Context, applicationID uuid.UUID) ([]College, error) {
-	rows, err := q.db.Query(ctx, getCollegesForApplication, applicationID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []College{}
-	for rows.Next() {
-		var i College
-		if err := rows.Scan(
-			&i.ID,
-			&i.TenantID,
-			&i.Name,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
-			&i.CreatedBy,
-			&i.UpdatedBy,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const getCollegesForApplications = `-- name: GetCollegesForApplications :many
-SELECT sac.application_id, c.id, c.name 
-FROM colleges c
-JOIN student_application_colleges sac ON sac.college_id = c.id
-WHERE sac.application_id = ANY($1::uuid[])
-ORDER BY c.name
-`
-
-type GetCollegesForApplicationsRow struct {
-	ApplicationID uuid.UUID
-	ID            uuid.UUID
-	Name          string
-}
-
-func (q *Queries) GetCollegesForApplications(ctx context.Context, applicationIds []uuid.UUID) ([]GetCollegesForApplicationsRow, error) {
-	rows, err := q.db.Query(ctx, getCollegesForApplications, applicationIds)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []GetCollegesForApplicationsRow{}
-	for rows.Next() {
-		var i GetCollegesForApplicationsRow
-		if err := rows.Scan(&i.ApplicationID, &i.ID, &i.Name); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const getStudentApplication = `-- name: GetStudentApplication :one
-SELECT id, student_id, application_type_id, application_status_id, application_number, application_name, last_date, applied_date, submitted_date, portal_username, portal_password, remarks, created_by, updated_by, created_at, updated_at, deleted_at, deleted_by, form_type_id, branch_id FROM student_applications WHERE id = $1 AND deleted_at IS NULL
-`
-
-func (q *Queries) GetStudentApplication(ctx context.Context, id uuid.UUID) (StudentApplication, error) {
-	row := q.db.QueryRow(ctx, getStudentApplication, id)
-	var i StudentApplication
+func (q *Queries) GetApplicationRequirementByID(ctx context.Context, id int64) (ApplicationRequirement, error) {
+	row := q.db.QueryRow(ctx, getApplicationRequirementByID, id)
+	var i ApplicationRequirement
 	err := row.Scan(
 		&i.ID,
-		&i.StudentID,
-		&i.ApplicationTypeID,
-		&i.ApplicationStatusID,
-		&i.ApplicationNumber,
-		&i.ApplicationName,
-		&i.LastDate,
-		&i.AppliedDate,
-		&i.SubmittedDate,
-		&i.PortalUsername,
-		&i.PortalPassword,
-		&i.Remarks,
-		&i.CreatedBy,
-		&i.UpdatedBy,
+		&i.ApplicationID,
+		&i.DocumentName,
+		&i.Description,
+		&i.Status,
+		&i.RejectionReason,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.DeletedBy,
-		&i.FormTypeID,
-		&i.BranchID,
+		&i.DisplayOrder,
+		&i.IsRequired,
+		&i.DocumentTypeID,
 	)
 	return i, err
 }
 
-const listStudentApplications = `-- name: ListStudentApplications :many
-SELECT a.id, a.student_id, a.application_type_id, a.application_status_id, a.application_number, a.application_name, a.last_date, a.applied_date, a.submitted_date, a.portal_username, a.portal_password, a.remarks, a.created_by, a.updated_by, a.created_at, a.updated_at, a.deleted_at, a.deleted_by, a.form_type_id, a.branch_id FROM student_applications a
-WHERE a.deleted_at IS NULL
-  AND a.branch_id = $1
-  AND ($2::text = ''
-       OR a.application_name ILIKE '%'||$2||'%'
-       OR a.application_number ILIKE '%'||$2||'%'
-       OR EXISTS (
-           SELECT 1 FROM student_application_colleges sac 
-           JOIN colleges c ON sac.college_id = c.id
-           WHERE sac.application_id = a.id AND c.name ILIKE '%'||$2||'%'
-       ))
-ORDER BY a.created_at DESC
-LIMIT $4 OFFSET $3
+const getApplicationRequirements = `-- name: GetApplicationRequirements :many
+SELECT id, application_id, document_name, description, status, rejection_reason, created_at, updated_at, display_order, is_required, document_type_id FROM application_requirements
+WHERE application_id = $1
+ORDER BY display_order ASC
 `
 
-type ListStudentApplicationsParams struct {
-	BranchID uuid.UUID
-	Filter   string
-	Off      int32
-	Lim      int32
-}
-
-func (q *Queries) ListStudentApplications(ctx context.Context, arg ListStudentApplicationsParams) ([]StudentApplication, error) {
-	rows, err := q.db.Query(ctx, listStudentApplications,
-		arg.BranchID,
-		arg.Filter,
-		arg.Off,
-		arg.Lim,
-	)
+func (q *Queries) GetApplicationRequirements(ctx context.Context, applicationID int64) ([]ApplicationRequirement, error) {
+	rows, err := q.db.Query(ctx, getApplicationRequirements, applicationID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []StudentApplication{}
+	items := []ApplicationRequirement{}
 	for rows.Next() {
-		var i StudentApplication
+		var i ApplicationRequirement
 		if err := rows.Scan(
 			&i.ID,
-			&i.StudentID,
-			&i.ApplicationTypeID,
-			&i.ApplicationStatusID,
-			&i.ApplicationNumber,
-			&i.ApplicationName,
-			&i.LastDate,
-			&i.AppliedDate,
-			&i.SubmittedDate,
-			&i.PortalUsername,
-			&i.PortalPassword,
-			&i.Remarks,
-			&i.CreatedBy,
-			&i.UpdatedBy,
+			&i.ApplicationID,
+			&i.DocumentName,
+			&i.Description,
+			&i.Status,
+			&i.RejectionReason,
 			&i.CreatedAt,
 			&i.UpdatedAt,
-			&i.DeletedAt,
-			&i.DeletedBy,
-			&i.FormTypeID,
-			&i.BranchID,
+			&i.DisplayOrder,
+			&i.IsRequired,
+			&i.DocumentTypeID,
 		); err != nil {
 			return nil, err
 		}
@@ -543,107 +428,508 @@ func (q *Queries) ListStudentApplications(ctx context.Context, arg ListStudentAp
 	return items, nil
 }
 
-const nextAppSequence = `-- name: NextAppSequence :one
-SELECT nextval('app_seq')::bigint AS seq
+const getDocumentVersionByID = `-- name: GetDocumentVersionByID :one
+SELECT id, requirement_id, version_number, uploaded_by_client, created_at FROM application_document_versions
+WHERE id = $1
 `
 
-func (q *Queries) NextAppSequence(ctx context.Context) (int64, error) {
-	row := q.db.QueryRow(ctx, nextAppSequence)
-	var seq int64
-	err := row.Scan(&seq)
-	return seq, err
+func (q *Queries) GetDocumentVersionByID(ctx context.Context, id int64) (ApplicationDocumentVersion, error) {
+	row := q.db.QueryRow(ctx, getDocumentVersionByID, id)
+	var i ApplicationDocumentVersion
+	err := row.Scan(
+		&i.ID,
+		&i.RequirementID,
+		&i.VersionNumber,
+		&i.UploadedByClient,
+		&i.CreatedAt,
+	)
+	return i, err
 }
 
-const softDeleteStudentApplication = `-- name: SoftDeleteStudentApplication :execrows
-UPDATE student_applications SET deleted_at = now(), deleted_by = $1 WHERE id = $2 AND deleted_at IS NULL
+const getDocumentVersionsByRequirement = `-- name: GetDocumentVersionsByRequirement :many
+SELECT id, requirement_id, version_number, uploaded_by_client, created_at FROM application_document_versions
+WHERE requirement_id = $1
+ORDER BY created_at DESC
 `
 
-type SoftDeleteStudentApplicationParams struct {
+func (q *Queries) GetDocumentVersionsByRequirement(ctx context.Context, requirementID int64) ([]ApplicationDocumentVersion, error) {
+	rows, err := q.db.Query(ctx, getDocumentVersionsByRequirement, requirementID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ApplicationDocumentVersion{}
+	for rows.Next() {
+		var i ApplicationDocumentVersion
+		if err := rows.Scan(
+			&i.ID,
+			&i.RequirementID,
+			&i.VersionNumber,
+			&i.UploadedByClient,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getLatestDocumentVersionNumber = `-- name: GetLatestDocumentVersionNumber :one
+SELECT COALESCE(MAX(version_number), 0)::int FROM application_document_versions
+WHERE requirement_id = $1
+`
+
+func (q *Queries) GetLatestDocumentVersionNumber(ctx context.Context, requirementID int64) (int32, error) {
+	row := q.db.QueryRow(ctx, getLatestDocumentVersionNumber, requirementID)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const getRequirementReviews = `-- name: GetRequirementReviews :many
+SELECT id, requirement_id, reviewer_id, reviewer_type, reviewer_name, status, comment, created_at FROM application_requirement_reviews
+WHERE requirement_id = $1
+ORDER BY created_at DESC
+`
+
+func (q *Queries) GetRequirementReviews(ctx context.Context, requirementID int64) ([]ApplicationRequirementReview, error) {
+	rows, err := q.db.Query(ctx, getRequirementReviews, requirementID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ApplicationRequirementReview{}
+	for rows.Next() {
+		var i ApplicationRequirementReview
+		if err := rows.Scan(
+			&i.ID,
+			&i.RequirementID,
+			&i.ReviewerID,
+			&i.ReviewerType,
+			&i.ReviewerName,
+			&i.Status,
+			&i.Comment,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getVersionFileByID = `-- name: GetVersionFileByID :one
+SELECT id, version_id, file_url, document_name, created_at, client_document_id FROM application_document_version_files
+WHERE id = $1
+`
+
+func (q *Queries) GetVersionFileByID(ctx context.Context, id int64) (ApplicationDocumentVersionFile, error) {
+	row := q.db.QueryRow(ctx, getVersionFileByID, id)
+	var i ApplicationDocumentVersionFile
+	err := row.Scan(
+		&i.ID,
+		&i.VersionID,
+		&i.FileUrl,
+		&i.DocumentName,
+		&i.CreatedAt,
+		&i.ClientDocumentID,
+	)
+	return i, err
+}
+
+const getVersionFilesByVersionID = `-- name: GetVersionFilesByVersionID :many
+SELECT id, version_id, file_url, document_name, created_at, client_document_id FROM application_document_version_files
+WHERE version_id = $1
+ORDER BY created_at ASC
+`
+
+func (q *Queries) GetVersionFilesByVersionID(ctx context.Context, versionID int64) ([]ApplicationDocumentVersionFile, error) {
+	rows, err := q.db.Query(ctx, getVersionFilesByVersionID, versionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ApplicationDocumentVersionFile{}
+	for rows.Next() {
+		var i ApplicationDocumentVersionFile
+		if err := rows.Scan(
+			&i.ID,
+			&i.VersionID,
+			&i.FileUrl,
+			&i.DocumentName,
+			&i.CreatedAt,
+			&i.ClientDocumentID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listApplications = `-- name: ListApplications :many
+SELECT id, client_id, title, status, created_at, updated_at, magic_link_token, magic_link_expires_at, final_deliverable_id, archived_at, archived_by, deleted_at, deleted_by FROM applications
+WHERE deleted_at IS NULL
+ORDER BY created_at DESC
+`
+
+func (q *Queries) ListApplications(ctx context.Context) ([]Application, error) {
+	rows, err := q.db.Query(ctx, listApplications)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Application{}
+	for rows.Next() {
+		var i Application
+		if err := rows.Scan(
+			&i.ID,
+			&i.ClientID,
+			&i.Title,
+			&i.Status,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.MagicLinkToken,
+			&i.MagicLinkExpiresAt,
+			&i.FinalDeliverableID,
+			&i.ArchivedAt,
+			&i.ArchivedBy,
+			&i.DeletedAt,
+			&i.DeletedBy,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listApplicationsByClient = `-- name: ListApplicationsByClient :many
+SELECT id, client_id, title, status, created_at, updated_at, magic_link_token, magic_link_expires_at, final_deliverable_id, archived_at, archived_by, deleted_at, deleted_by FROM applications
+WHERE client_id = $1 AND deleted_at IS NULL
+ORDER BY created_at DESC
+`
+
+func (q *Queries) ListApplicationsByClient(ctx context.Context, clientID int64) ([]Application, error) {
+	rows, err := q.db.Query(ctx, listApplicationsByClient, clientID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Application{}
+	for rows.Next() {
+		var i Application
+		if err := rows.Scan(
+			&i.ID,
+			&i.ClientID,
+			&i.Title,
+			&i.Status,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.MagicLinkToken,
+			&i.MagicLinkExpiresAt,
+			&i.FinalDeliverableID,
+			&i.ArchivedAt,
+			&i.ArchivedBy,
+			&i.DeletedAt,
+			&i.DeletedBy,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTimelineEvents = `-- name: ListTimelineEvents :many
+SELECT id, application_id, event_type, actor_type, actor_id, description, metadata, created_at FROM application_timeline
+WHERE application_id = $1
+ORDER BY created_at DESC
+`
+
+func (q *Queries) ListTimelineEvents(ctx context.Context, applicationID int64) ([]ApplicationTimeline, error) {
+	rows, err := q.db.Query(ctx, listTimelineEvents, applicationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ApplicationTimeline{}
+	for rows.Next() {
+		var i ApplicationTimeline
+		if err := rows.Scan(
+			&i.ID,
+			&i.ApplicationID,
+			&i.EventType,
+			&i.ActorType,
+			&i.ActorID,
+			&i.Description,
+			&i.Metadata,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const restoreApplication = `-- name: RestoreApplication :one
+UPDATE applications
+SET archived_at = NULL, archived_by = NULL, updated_at = now()
+WHERE id = $1
+RETURNING id, client_id, title, status, created_at, updated_at, magic_link_token, magic_link_expires_at, final_deliverable_id, archived_at, archived_by, deleted_at, deleted_by
+`
+
+func (q *Queries) RestoreApplication(ctx context.Context, id int64) (Application, error) {
+	row := q.db.QueryRow(ctx, restoreApplication, id)
+	var i Application
+	err := row.Scan(
+		&i.ID,
+		&i.ClientID,
+		&i.Title,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.MagicLinkToken,
+		&i.MagicLinkExpiresAt,
+		&i.FinalDeliverableID,
+		&i.ArchivedAt,
+		&i.ArchivedBy,
+		&i.DeletedAt,
+		&i.DeletedBy,
+	)
+	return i, err
+}
+
+const setFinalDeliverable = `-- name: SetFinalDeliverable :one
+UPDATE applications
+SET final_deliverable_id = $2, updated_at = now()
+WHERE id = $1
+RETURNING id, client_id, title, status, created_at, updated_at, magic_link_token, magic_link_expires_at, final_deliverable_id, archived_at, archived_by, deleted_at, deleted_by
+`
+
+type SetFinalDeliverableParams struct {
+	ID                 int64
+	FinalDeliverableID *int64
+}
+
+func (q *Queries) SetFinalDeliverable(ctx context.Context, arg SetFinalDeliverableParams) (Application, error) {
+	row := q.db.QueryRow(ctx, setFinalDeliverable, arg.ID, arg.FinalDeliverableID)
+	var i Application
+	err := row.Scan(
+		&i.ID,
+		&i.ClientID,
+		&i.Title,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.MagicLinkToken,
+		&i.MagicLinkExpiresAt,
+		&i.FinalDeliverableID,
+		&i.ArchivedAt,
+		&i.ArchivedBy,
+		&i.DeletedAt,
+		&i.DeletedBy,
+	)
+	return i, err
+}
+
+const setMagicLinkToken = `-- name: SetMagicLinkToken :one
+UPDATE applications
+SET magic_link_token = $2, magic_link_expires_at = $3, updated_at = now()
+WHERE id = $1
+RETURNING id, client_id, title, status, created_at, updated_at, magic_link_token, magic_link_expires_at, final_deliverable_id, archived_at, archived_by, deleted_at, deleted_by
+`
+
+type SetMagicLinkTokenParams struct {
+	ID                 int64
+	MagicLinkToken     *uuid.UUID
+	MagicLinkExpiresAt *time.Time
+}
+
+func (q *Queries) SetMagicLinkToken(ctx context.Context, arg SetMagicLinkTokenParams) (Application, error) {
+	row := q.db.QueryRow(ctx, setMagicLinkToken, arg.ID, arg.MagicLinkToken, arg.MagicLinkExpiresAt)
+	var i Application
+	err := row.Scan(
+		&i.ID,
+		&i.ClientID,
+		&i.Title,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.MagicLinkToken,
+		&i.MagicLinkExpiresAt,
+		&i.FinalDeliverableID,
+		&i.ArchivedAt,
+		&i.ArchivedBy,
+		&i.DeletedAt,
+		&i.DeletedBy,
+	)
+	return i, err
+}
+
+const softDeleteApplication = `-- name: SoftDeleteApplication :one
+UPDATE applications
+SET deleted_at = now(), deleted_by = $2, updated_at = now()
+WHERE id = $1
+RETURNING id, client_id, title, status, created_at, updated_at, magic_link_token, magic_link_expires_at, final_deliverable_id, archived_at, archived_by, deleted_at, deleted_by
+`
+
+type SoftDeleteApplicationParams struct {
+	ID        int64
 	DeletedBy *int64
-	ID        uuid.UUID
 }
 
-func (q *Queries) SoftDeleteStudentApplication(ctx context.Context, arg SoftDeleteStudentApplicationParams) (int64, error) {
-	result, err := q.db.Exec(ctx, softDeleteStudentApplication, arg.DeletedBy, arg.ID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const updateStudentApplication = `-- name: UpdateStudentApplication :one
-UPDATE student_applications SET
-    application_type_id = $1,
-    application_status_id = $2,
-    application_number = $3,
-    application_name = $4,
-    last_date = $5,
-    applied_date = $6,
-    submitted_date = $7,
-    form_type_id = $8,
-    portal_username = $9,
-    portal_password = $10,
-    remarks = $11,
-    updated_by = $12,
-    updated_at = now()
-WHERE id = $13 AND deleted_at IS NULL
-RETURNING id, student_id, application_type_id, application_status_id, application_number, application_name, last_date, applied_date, submitted_date, portal_username, portal_password, remarks, created_by, updated_by, created_at, updated_at, deleted_at, deleted_by, form_type_id, branch_id
-`
-
-type UpdateStudentApplicationParams struct {
-	ApplicationTypeID   uuid.UUID
-	ApplicationStatusID uuid.UUID
-	ApplicationNumber   *string
-	ApplicationName     *string
-	LastDate            *time.Time
-	AppliedDate         *time.Time
-	SubmittedDate       *time.Time
-	FormTypeID          *uuid.UUID
-	PortalUsername      *string
-	PortalPassword      *string
-	Remarks             *string
-	UpdatedBy           *int64
-	ID                  uuid.UUID
-}
-
-func (q *Queries) UpdateStudentApplication(ctx context.Context, arg UpdateStudentApplicationParams) (StudentApplication, error) {
-	row := q.db.QueryRow(ctx, updateStudentApplication,
-		arg.ApplicationTypeID,
-		arg.ApplicationStatusID,
-		arg.ApplicationNumber,
-		arg.ApplicationName,
-		arg.LastDate,
-		arg.AppliedDate,
-		arg.SubmittedDate,
-		arg.FormTypeID,
-		arg.PortalUsername,
-		arg.PortalPassword,
-		arg.Remarks,
-		arg.UpdatedBy,
-		arg.ID,
-	)
-	var i StudentApplication
+func (q *Queries) SoftDeleteApplication(ctx context.Context, arg SoftDeleteApplicationParams) (Application, error) {
+	row := q.db.QueryRow(ctx, softDeleteApplication, arg.ID, arg.DeletedBy)
+	var i Application
 	err := row.Scan(
 		&i.ID,
-		&i.StudentID,
-		&i.ApplicationTypeID,
-		&i.ApplicationStatusID,
-		&i.ApplicationNumber,
-		&i.ApplicationName,
-		&i.LastDate,
-		&i.AppliedDate,
-		&i.SubmittedDate,
-		&i.PortalUsername,
-		&i.PortalPassword,
-		&i.Remarks,
-		&i.CreatedBy,
-		&i.UpdatedBy,
+		&i.ClientID,
+		&i.Title,
+		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.MagicLinkToken,
+		&i.MagicLinkExpiresAt,
+		&i.FinalDeliverableID,
+		&i.ArchivedAt,
+		&i.ArchivedBy,
 		&i.DeletedAt,
 		&i.DeletedBy,
-		&i.FormTypeID,
-		&i.BranchID,
 	)
 	return i, err
+}
+
+const updateApplicationStatus = `-- name: UpdateApplicationStatus :one
+UPDATE applications
+SET status = $2, updated_at = now()
+WHERE id = $1
+RETURNING id, client_id, title, status, created_at, updated_at, magic_link_token, magic_link_expires_at, final_deliverable_id, archived_at, archived_by, deleted_at, deleted_by
+`
+
+type UpdateApplicationStatusParams struct {
+	ID     int64
+	Status string
+}
+
+func (q *Queries) UpdateApplicationStatus(ctx context.Context, arg UpdateApplicationStatusParams) (Application, error) {
+	row := q.db.QueryRow(ctx, updateApplicationStatus, arg.ID, arg.Status)
+	var i Application
+	err := row.Scan(
+		&i.ID,
+		&i.ClientID,
+		&i.Title,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.MagicLinkToken,
+		&i.MagicLinkExpiresAt,
+		&i.FinalDeliverableID,
+		&i.ArchivedAt,
+		&i.ArchivedBy,
+		&i.DeletedAt,
+		&i.DeletedBy,
+	)
+	return i, err
+}
+
+const updateApplicationTitle = `-- name: UpdateApplicationTitle :one
+UPDATE applications
+SET title = $2, updated_at = now()
+WHERE id = $1
+RETURNING id, client_id, title, status, created_at, updated_at, magic_link_token, magic_link_expires_at, final_deliverable_id, archived_at, archived_by, deleted_at, deleted_by
+`
+
+type UpdateApplicationTitleParams struct {
+	ID    int64
+	Title string
+}
+
+func (q *Queries) UpdateApplicationTitle(ctx context.Context, arg UpdateApplicationTitleParams) (Application, error) {
+	row := q.db.QueryRow(ctx, updateApplicationTitle, arg.ID, arg.Title)
+	var i Application
+	err := row.Scan(
+		&i.ID,
+		&i.ClientID,
+		&i.Title,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.MagicLinkToken,
+		&i.MagicLinkExpiresAt,
+		&i.FinalDeliverableID,
+		&i.ArchivedAt,
+		&i.ArchivedBy,
+		&i.DeletedAt,
+		&i.DeletedBy,
+	)
+	return i, err
+}
+
+const updateRequirementStatus = `-- name: UpdateRequirementStatus :one
+UPDATE application_requirements
+SET status = $2, rejection_reason = $3, updated_at = now()
+WHERE id = $1
+RETURNING id, application_id, document_name, description, status, rejection_reason, created_at, updated_at, display_order, is_required, document_type_id
+`
+
+type UpdateRequirementStatusParams struct {
+	ID              int64
+	Status          string
+	RejectionReason *string
+}
+
+func (q *Queries) UpdateRequirementStatus(ctx context.Context, arg UpdateRequirementStatusParams) (ApplicationRequirement, error) {
+	row := q.db.QueryRow(ctx, updateRequirementStatus, arg.ID, arg.Status, arg.RejectionReason)
+	var i ApplicationRequirement
+	err := row.Scan(
+		&i.ID,
+		&i.ApplicationID,
+		&i.DocumentName,
+		&i.Description,
+		&i.Status,
+		&i.RejectionReason,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DisplayOrder,
+		&i.IsRequired,
+		&i.DocumentTypeID,
+	)
+	return i, err
+}
+
+const updateVersionFileClientDocumentID = `-- name: UpdateVersionFileClientDocumentID :exec
+UPDATE application_document_version_files
+SET client_document_id = $2
+WHERE id = $1
+`
+
+type UpdateVersionFileClientDocumentIDParams struct {
+	ID               int64
+	ClientDocumentID *int64
+}
+
+func (q *Queries) UpdateVersionFileClientDocumentID(ctx context.Context, arg UpdateVersionFileClientDocumentIDParams) error {
+	_, err := q.db.Exec(ctx, updateVersionFileClientDocumentID, arg.ID, arg.ClientDocumentID)
+	return err
 }

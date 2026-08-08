@@ -11,6 +11,23 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type ApplicationType struct {
+	ID          int64
+	Name        string
+	Description *string
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
+type ApplicationTypeDocument struct {
+	ID                int64
+	ApplicationTypeID int64
+	DisplayOrder      int32
+	IsRequired        bool
+	CreatedAt         time.Time
+	DocumentTypeID    int64
+}
+
 type AuthToken struct {
 	ID         int64
 	UserID     int64
@@ -19,6 +36,45 @@ type AuthToken struct {
 	ExpiresAt  time.Time
 	ConsumedAt *time.Time
 	CreatedAt  time.Time
+}
+
+type ClientConnection struct {
+	ID           int64
+	ClientID     int64
+	TenantID     int64
+	Status       string
+	CreatedAt    time.Time
+	ConnectedBy  *int64
+	AcceptedAt   *time.Time
+	AcceptedBy   *int64
+	RemovedAt    *time.Time
+	RemovedBy    *int64
+	StatusReason *string
+}
+
+type ClientDocument struct {
+	ID               int64
+	ClientID         int64
+	DocumentTypeID   int64
+	FileName         string
+	OriginalFileName string
+	FileSize         int64
+	MimeType         string
+	Sha256Hash       *string
+	StoragePath      string
+	UploadedBy       *int64
+	Source           string
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+}
+
+type ClientProfile struct {
+	ID             int64
+	UserID         int64
+	ConnectionCode string
+	FullName       *string
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
 }
 
 type CompanyProfile struct {
@@ -42,6 +98,54 @@ type CompanyProfile struct {
 	UpdatedAt      time.Time
 }
 
+type ConnectionPermission struct {
+	ID                  int64
+	ConnectionID        int64
+	ViewProfile         bool
+	ViewDocuments       bool
+	UploadDocuments     bool
+	CreateApplications  bool
+	ViewApplications    bool
+	ApproveApplications bool
+	ManageConnection    bool
+	UpdatedAt           time.Time
+}
+
+type ConnectionRequest struct {
+	ID        int64
+	ClientID  int64
+	TenantID  int64
+	Status    string
+	CreatedAt time.Time
+}
+
+type DocumentAccessGrant struct {
+	ID           int64
+	DocumentID   int64
+	ConnectionID int64
+	GrantedAt    time.Time
+}
+
+type DocumentType struct {
+	ID          int64
+	Name        string
+	Description *string
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+	IsActive    bool
+}
+
+type MagicLink struct {
+	ID            int64
+	Token         uuid.UUID
+	TenantID      int64
+	ApplicationID int64
+	ClientID      int64
+	ExpiresAt     time.Time
+	IsUsed        bool
+	CreatedAt     time.Time
+}
+
 type Notification struct {
 	ID        int64
 	UserID    int64
@@ -52,6 +156,15 @@ type Notification struct {
 	Link      *string
 	IsRead    bool
 	CreatedAt time.Time
+}
+
+type OrganizationType struct {
+	ID          int64
+	Name        string
+	Description *string
+	IsActive    bool
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
 }
 
 type OtpCode struct {
@@ -162,23 +275,43 @@ type SystemLog struct {
 }
 
 type Tenant struct {
-	TenantID          int64
-	TenantName        string
-	CompanyName       *string
-	TenantCode        *string
-	SchemaName        string
-	Subdomain         *string
-	Status            string
-	ContactEmail      *string
-	ContactPhone      *string
-	LogoUrl           *string
-	WhatsappBalance   *int32
-	WhatsappSentCount int64
-	IsActive          bool
-	CreatedBy         *int64
-	UpdatedBy         *int64
-	CreatedAt         time.Time
-	UpdatedAt         *time.Time
+	TenantID           int64
+	TenantName         string
+	CompanyName        *string
+	TenantCode         *string
+	SchemaName         string
+	Subdomain          *string
+	Status             string
+	ContactEmail       *string
+	ContactPhone       *string
+	LogoUrl            *string
+	WhatsappBalance    *int32
+	WhatsappSentCount  int64
+	IsActive           bool
+	CreatedBy          *int64
+	UpdatedBy          *int64
+	CreatedAt          time.Time
+	UpdatedAt          *time.Time
+	OrgType            *string
+	KycStatus          string
+	KycVerifiedBy      *int64
+	KycVerifiedAt      *time.Time
+	KycRejectedBy      *int64
+	KycRejectedAt      *time.Time
+	KycRejectionReason *string
+	OrganizationTypeID *int64
+}
+
+type TenantDocument struct {
+	ID           int64
+	TenantID     int64
+	DocumentType string
+	OriginalName string
+	StoredName   string
+	MimeType     string
+	StoragePath  string
+	UploadedAt   time.Time
+	UploadedBy   int64
 }
 
 type TenantPayment struct {
@@ -225,6 +358,8 @@ type User struct {
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 	DeletedAt    *time.Time
+	UserType     string
+	IsSuperadmin bool
 }
 
 type UserActivity struct {

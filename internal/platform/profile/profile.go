@@ -75,10 +75,11 @@ type companyProfileDto struct {
 
 // userProfileDto carries the per-user profile details.
 type userProfileDto struct {
-	FirstName     string `json:"firstName"`
-	LastName      string `json:"lastName"`
-	JobTitle      string `json:"jobTitle"`
-	ContactNumber string `json:"contactNumber"`
+	FirstName      string `json:"firstName"`
+	LastName       string `json:"lastName"`
+	JobTitle       string `json:"jobTitle"`
+	ContactNumber  string `json:"contactNumber"`
+	ConnectionCode string `json:"connectionCode"`
 }
 
 // fullProfileDto is the combined payload for both GET and PUT.
@@ -137,9 +138,17 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	client, err := h.q.GetClientProfileByUserId(ctx, userID)
+	// Ignore err for client profile, it may not exist for organization owners.
+
+	userDto := toUserDTO(user)
+	if err == nil {
+		userDto.ConnectionCode = client.ConnectionCode
+	}
+
 	out := fullProfileDto{
 		CompanyProfile: toCompanyDTO(company),
-		UserProfile:    toUserDTO(user),
+		UserProfile:    userDto,
 	}
 	apiresp.OK(w, out, "")
 }
@@ -169,27 +178,29 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := h.q.UpsertCompanyProfile(ctx, public.UpsertCompanyProfileParams{
-		TenantID:       tenantID,
-		CompanyName:    conv.PtrStr(c.CompanyName),
-		CompanyLogoUrl: conv.PtrStr(c.CompanyLogoURL),
-		ContactEmail:   conv.PtrStr(c.ContactEmail),
-		ContactPhone:   conv.PtrStr(c.ContactPhone),
-		SupportPhone:   conv.PtrStr(c.SupportPhone),
-		Website:        conv.PtrStr(c.Website),
-		AddressLine1:   conv.PtrStr(c.AddressLine1),
-		AddressLine2:   conv.PtrStr(c.AddressLine2),
-		City:           conv.PtrStr(c.City),
-		State:          conv.PtrStr(c.State),
-		Country:        conv.PtrStr(c.Country),
-		PostalCode:     conv.PtrStr(c.PostalCode),
-		Gstin:          conv.PtrStr(c.Gstin),
-		Pan:            conv.PtrStr(c.Pan),
-		CinNo:          conv.PtrStr(c.CinNo),
-		MsmeNo:         conv.PtrStr(c.MsmeNo),
-	}); err != nil {
-		h.fail(w, err)
-		return
+	if tenantID != 0 {
+		if _, err := h.q.UpsertCompanyProfile(ctx, public.UpsertCompanyProfileParams{
+			TenantID:       tenantID,
+			CompanyName:    conv.PtrStr(c.CompanyName),
+			CompanyLogoUrl: conv.PtrStr(c.CompanyLogoURL),
+			ContactEmail:   conv.PtrStr(c.ContactEmail),
+			ContactPhone:   conv.PtrStr(c.ContactPhone),
+			SupportPhone:   conv.PtrStr(c.SupportPhone),
+			Website:        conv.PtrStr(c.Website),
+			AddressLine1:   conv.PtrStr(c.AddressLine1),
+			AddressLine2:   conv.PtrStr(c.AddressLine2),
+			City:           conv.PtrStr(c.City),
+			State:          conv.PtrStr(c.State),
+			Country:        conv.PtrStr(c.Country),
+			PostalCode:     conv.PtrStr(c.PostalCode),
+			Gstin:          conv.PtrStr(c.Gstin),
+			Pan:            conv.PtrStr(c.Pan),
+			CinNo:          conv.PtrStr(c.CinNo),
+			MsmeNo:         conv.PtrStr(c.MsmeNo),
+		}); err != nil {
+			h.fail(w, err)
+			return
+		}
 	}
 
 	apiresp.OK(w, true, "Profile updated")

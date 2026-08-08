@@ -20,29 +20,22 @@ import (
 	"github.com/thinkparq/edconsultancy-be/internal/tenancy"
 	"github.com/thinkparq/edconsultancy-be/internal/token"
 
-	"github.com/thinkparq/edconsultancy-be/internal/consultancy/applications"
-	"github.com/thinkparq/edconsultancy-be/internal/consultancy/appstatuses"
-	"github.com/thinkparq/edconsultancy-be/internal/consultancy/apptypes"
-	"github.com/thinkparq/edconsultancy-be/internal/consultancy/branches"
-	"github.com/thinkparq/edconsultancy-be/internal/consultancy/castes"
-	"github.com/thinkparq/edconsultancy-be/internal/consultancy/categories"
-	"github.com/thinkparq/edconsultancy-be/internal/consultancy/codeconfig"
-	"github.com/thinkparq/edconsultancy-be/internal/consultancy/codesequence"
-	"github.com/thinkparq/edconsultancy-be/internal/consultancy/colleges"
-	"github.com/thinkparq/edconsultancy-be/internal/consultancy/dashboard"
-	"github.com/thinkparq/edconsultancy-be/internal/consultancy/feecollections"
-	"github.com/thinkparq/edconsultancy-be/internal/consultancy/feeplans"
-	"github.com/thinkparq/edconsultancy-be/internal/consultancy/feetypes"
-	"github.com/thinkparq/edconsultancy-be/internal/consultancy/formtypes"
-	"github.com/thinkparq/edconsultancy-be/internal/consultancy/payments"
-	"github.com/thinkparq/edconsultancy-be/internal/consultancy/students"
-
+	"github.com/thinkparq/edconsultancy-be/internal/platform/applications"
+	"github.com/thinkparq/edconsultancy-be/internal/platform/clients"
+	"github.com/thinkparq/edconsultancy-be/internal/platform/connectionpermissions"
+	"github.com/thinkparq/edconsultancy-be/internal/platform/dashboard"
+	"github.com/thinkparq/edconsultancy-be/internal/platform/document_types"
+	"github.com/thinkparq/edconsultancy-be/internal/platform/kyc"
+	"github.com/thinkparq/edconsultancy-be/internal/platform/magiclink"
 	"github.com/thinkparq/edconsultancy-be/internal/platform/notifications"
+	"github.com/thinkparq/edconsultancy-be/internal/platform/organization_types"
 	"github.com/thinkparq/edconsultancy-be/internal/platform/permissions"
 	"github.com/thinkparq/edconsultancy-be/internal/platform/profile"
 	"github.com/thinkparq/edconsultancy-be/internal/platform/subscription"
+	"github.com/thinkparq/edconsultancy-be/internal/platform/superadmin"
 	"github.com/thinkparq/edconsultancy-be/internal/platform/support"
 	"github.com/thinkparq/edconsultancy-be/internal/platform/systemlog"
+	"github.com/thinkparq/edconsultancy-be/internal/platform/templates"
 	"github.com/thinkparq/edconsultancy-be/internal/platform/tenants"
 	"github.com/thinkparq/edconsultancy-be/internal/platform/useractivity"
 	"github.com/thinkparq/edconsultancy-be/internal/platform/users"
@@ -61,7 +54,11 @@ type Server struct {
 
 	authHandler    *auth.Handler
 	profileHandler *profile.Handler
+	
+	magiclinkHandler *magiclink.Handler
+	templatesHandler *templates.Handler
 
+	authenticated   []Module // mounted behind Require
 	protected       []Module // mounted behind RequireTenant
 	branchProtected []Module // mounted behind RequireBranch
 }
@@ -74,6 +71,11 @@ func New(cfg *config.Config, pool *pgxpool.Pool, logger *slog.Logger) *Server {
 
 	authSvc := auth.NewService(pool, issuer, mailer, cfg, tm, logger)
 
+	// --- New Phase 2 Modules ---
+	clientsHandler := clients.New(pool, logger)
+	connPermsHandler := connectionpermissions.New(pool, logger)
+	dashboardHandler := dashboard.New(pool, logger)
+
 	s := &Server{
 		cfg:            cfg,
 		pool:           pool,
@@ -81,40 +83,40 @@ func New(cfg *config.Config, pool *pgxpool.Pool, logger *slog.Logger) *Server {
 		authMW:         mw.NewAuth(issuer, tm, logger, pool),
 		authHandler:    auth.NewHandler(authSvc, cfg, logger),
 		profileHandler: profile.New(pool, logger),
+		templatesHandler: templates.New(pool, logger),
+	}
+
+	// Phase 3 Modules
+	applicationsHandler := applications.New(pool, logger)
+	s.magiclinkHandler = magiclink.NewHandler(pool, logger, applicationsHandler.Service())
+
+	s.authenticated = []Module{
+		notifications.New(pool, logger),
+		s.profileHandler, // protected GET/PUT /Profile
+		clientsHandler,
+		connPermsHandler,
+		dashboardHandler,
+		kyc.New(pool, logger, s.authMW), // moved from protected
+		superadmin.New(pool, logger),
+		users.New(pool, logger, s.authMW),       // moved from protected
+		permissions.New(pool, logger, s.authMW), // moved from protected
+		document_types.New(pool, logger),
+		organization_types.New(pool, logger),
+		applicationsHandler,
 	}
 
 	s.protected = []Module{
 		// Platform (public schema)
-		users.New(pool, logger, s.authMW),
-		permissions.New(pool, logger, s.authMW),
 		tenants.New(pool, tm, logger, s.authMW),
 		subscription.New(pool, logger),
 		support.New(pool, logger),
 		systemlog.New(pool, logger),
 		useractivity.New(pool, logger),
-		notifications.New(pool, logger),
-		s.profileHandler, // protected GET/PUT /Profile
-
-		categories.New(tm, logger, s.authMW),
-		castes.New(tm, logger, s.authMW),
-		codeconfig.New(tm, logger, s.authMW),
-		apptypes.New(tm, logger, s.authMW),
-		appstatuses.New(tm, logger, s.authMW),
-		feetypes.New(tm, logger, s.authMW),
-		codesequence.New(tm, logger, s.authMW),
-		formtypes.New(tm, logger, s.authMW),
-		colleges.New(tm, logger, s.authMW),
-		branches.New(tm, logger, s.authMW),
+		// Magic Link generation is protected (org uses it)
+		s.magiclinkHandler,
 	}
 
-	s.branchProtected = []Module{
-		students.New(tm, logger, s.authMW),
-		applications.New(tm, logger, s.authMW),
-		feeplans.New(tm, logger, s.authMW),
-		feecollections.New(tm, logger, s.authMW),
-		payments.New(tm, logger, s.authMW),
-		dashboard.New(tm, logger, s.authMW),
-	}
+	s.branchProtected = []Module{}
 
 	return s
 }
@@ -148,6 +150,17 @@ func (s *Server) Router() http.Handler {
 		// ── Public (no auth) ──
 		s.authHandler.Mount(api)          // /Auth/*
 		s.profileHandler.MountPublic(api) // GET /Profile/public-logo/{tenantId}
+		s.magiclinkHandler.MountPublic(api) // /MagicLink/*
+
+		// ── Authenticated (no tenant required) ──
+		api.Group(func(ar chi.Router) {
+			ar.Use(s.authMW.Require)
+			for _, m := range s.authenticated {
+				m.Mount(ar)
+			}
+			s.templatesHandler.MountPublic(ar)
+			s.templatesHandler.MountAdmin(ar)
+		})
 
 		// ── Protected (require a selected tenant) ──
 		api.Group(func(pr chi.Router) {

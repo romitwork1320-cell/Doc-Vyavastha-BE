@@ -70,6 +70,40 @@ func (i *Issuer) IssueAccess(userID, tenantID int64, role string, perms []PagePe
 	return i.sign(c)
 }
 
+// IssueClientAccess mints a full access token for a client user (no tenant).
+func (i *Issuer) IssueClientAccess(userID int64) (string, error) {
+	now := time.Now()
+	c := Claims{
+		UserID:   strconv.FormatInt(userID, 10),
+		TenantID: "0",
+		Role:     "Client",
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    i.issuer,
+			Subject:   strconv.FormatInt(userID, 10),
+			IssuedAt:  jwt.NewNumericDate(now),
+			ExpiresAt: jwt.NewNumericDate(now.Add(i.accessTTL)),
+		},
+	}
+	return i.sign(c)
+}
+
+// IssueSuperAdminAccess mints an access token for Super Admins.
+func (i *Issuer) IssueSuperAdminAccess(userID int64) (string, error) {
+	now := time.Now()
+	c := Claims{
+		UserID:   strconv.FormatInt(userID, 10),
+		TenantID: "0",
+		Role:     "SuperAdmin",
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    i.issuer,
+			Subject:   strconv.FormatInt(userID, 10),
+			IssuedAt:  jwt.NewNumericDate(now),
+			ExpiresAt: jwt.NewNumericDate(now.Add(i.accessTTL)),
+		},
+	}
+	return i.sign(c)
+}
+
 // IssueTemp mints a short-lived token used only to call /Auth/select-tenant.
 func (i *Issuer) IssueTemp(userID int64) (string, error) {
 	now := time.Now()

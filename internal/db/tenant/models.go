@@ -11,46 +11,106 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type ApplicationFeeCollection struct {
-	ID                         uuid.UUID
-	ApplicationID              uuid.UUID
-	StaffID                    int64
-	CollegeFeeAmount           pgtype.Numeric
-	PaymentToCollegeMethod     string
-	StudentReimbursementMethod string
-	StudentTransactionRef      *string
-	AdminVerificationStatus    string
-	AdminRemarks               *string
-	BranchID                   uuid.UUID
-	CreatedBy                  *int64
-	UpdatedBy                  *int64
-	CreatedAt                  time.Time
-	UpdatedAt                  time.Time
-	DeletedAt                  *time.Time
-	DeletedBy                  *int64
-	StaffRemarks               *string
-	VerifiedBy                 *int64
-	VerifiedAt                 *time.Time
+type Application struct {
+	ID                 int64
+	ClientID           int64
+	Title              string
+	Status             string
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+	MagicLinkToken     *uuid.UUID
+	MagicLinkExpiresAt *time.Time
+	FinalDeliverableID *int64
+	ArchivedAt         *time.Time
+	ArchivedBy         *int64
+	DeletedAt          *time.Time
+	DeletedBy          *int64
 }
 
-type ApplicationStatus struct {
-	ID           uuid.UUID
-	Name         string
-	Description  *string
-	ColorCode    *string
-	Status       string
-	DisplayOrder int32
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+type ApplicationDeliverable struct {
+	ID               int64
+	ApplicationID    int64
+	ClientDocumentID int64
+	UploadedByUserID *int64
+	CreatedAt        time.Time
+}
+
+type ApplicationDocument struct {
+	ID            int64
+	ApplicationID int64
+	DocumentID    int64
+	Notes         *string
+	LinkedAt      time.Time
+}
+
+type ApplicationDocumentVersion struct {
+	ID               int64
+	RequirementID    int64
+	VersionNumber    int32
+	UploadedByClient bool
+	CreatedAt        time.Time
+}
+
+type ApplicationDocumentVersionFile struct {
+	ID               int64
+	VersionID        int64
+	FileUrl          string
+	DocumentName     string
+	CreatedAt        time.Time
+	ClientDocumentID *int64
+}
+
+type ApplicationRequirement struct {
+	ID              int64
+	ApplicationID   int64
+	DocumentName    string
+	Description     *string
+	Status          string
+	RejectionReason *string
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+	DisplayOrder    int32
+	IsRequired      bool
+	DocumentTypeID  int64
+}
+
+type ApplicationRequirementReview struct {
+	ID            int64
+	RequirementID int64
+	ReviewerID    *int64
+	ReviewerType  string
+	ReviewerName  *string
+	Status        string
+	Comment       *string
+	CreatedAt     time.Time
+}
+
+type ApplicationTimeline struct {
+	ID            int64
+	ApplicationID int64
+	EventType     string
+	ActorType     string
+	ActorID       *int64
+	Description   string
+	Metadata      []byte
+	CreatedAt     time.Time
 }
 
 type ApplicationType struct {
-	ID          uuid.UUID
+	ID          int64
 	Name        string
 	Description *string
-	Status      string
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
+}
+
+type ApplicationTypeDocument struct {
+	ID                int64
+	ApplicationTypeID int64
+	DisplayOrder      int32
+	IsRequired        bool
+	CreatedAt         time.Time
+	DocumentTypeID    int64
 }
 
 type AuthToken struct {
@@ -63,27 +123,43 @@ type AuthToken struct {
 	CreatedAt  time.Time
 }
 
-type Branch struct {
-	ID        uuid.UUID
-	Name      string
-	Code      *string
-	Address   *string
-	Contact   *string
-	Status    string
-	CreatedAt time.Time
-	UpdatedAt time.Time
-	DeletedAt *time.Time
+type ClientConnection struct {
+	ID           int64
+	ClientID     int64
+	TenantID     int64
+	Status       string
+	CreatedAt    time.Time
+	ConnectedBy  *int64
+	AcceptedAt   *time.Time
+	AcceptedBy   *int64
+	RemovedAt    *time.Time
+	RemovedBy    *int64
+	StatusReason *string
 }
 
-type College struct {
-	ID        uuid.UUID
-	TenantID  int64
-	Name      string
-	CreatedAt pgtype.Timestamptz
-	UpdatedAt pgtype.Timestamptz
-	DeletedAt pgtype.Timestamptz
-	CreatedBy *int64
-	UpdatedBy *int64
+type ClientDocument struct {
+	ID               int64
+	ClientID         int64
+	DocumentTypeID   int64
+	FileName         string
+	OriginalFileName string
+	FileSize         int64
+	MimeType         string
+	Sha256Hash       *string
+	StoragePath      string
+	UploadedBy       *int64
+	Source           string
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+}
+
+type ClientProfile struct {
+	ID             int64
+	UserID         int64
+	ConnectionCode string
+	FullName       *string
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
 }
 
 type CompanyProfile struct {
@@ -107,29 +183,60 @@ type CompanyProfile struct {
 	UpdatedAt      time.Time
 }
 
-type FeeType struct {
-	ID          uuid.UUID
+type ConnectionPermission struct {
+	ID                  int64
+	ConnectionID        int64
+	ViewProfile         bool
+	ViewDocuments       bool
+	UploadDocuments     bool
+	CreateApplications  bool
+	ViewApplications    bool
+	ApproveApplications bool
+	ManageConnection    bool
+	UpdatedAt           time.Time
+}
+
+type ConnectionRequest struct {
+	ID        int64
+	ClientID  int64
+	TenantID  int64
+	Status    string
+	CreatedAt time.Time
+}
+
+type DocumentAccessGrant struct {
+	ID           int64
+	DocumentID   int64
+	ConnectionID int64
+	GrantedAt    time.Time
+}
+
+type DocumentType struct {
+	ID          int64
 	Name        string
 	Description *string
-	Status      string
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
-	Amount      pgtype.Numeric
+	IsActive    bool
 }
 
-type FeeTypeCategory struct {
-	FeeTypeID  uuid.UUID
-	CategoryID uuid.UUID
+type MagicLink struct {
+	ID            int64
+	Token         uuid.UUID
+	TenantID      int64
+	ApplicationID int64
+	ClientID      int64
+	ExpiresAt     time.Time
+	IsUsed        bool
+	CreatedAt     time.Time
 }
 
-type FormType struct {
-	ID           uuid.UUID
-	Name         string
-	Description  *string
-	Status       string
-	DisplayOrder int32
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+type Note struct {
+	ID            int64
+	ApplicationID int64
+	AuthorID      int64
+	Text          string
+	CreatedAt     time.Time
 }
 
 type Notification struct {
@@ -142,6 +249,15 @@ type Notification struct {
 	Link      *string
 	IsRead    bool
 	CreatedAt time.Time
+}
+
+type OrganizationType struct {
+	ID          int64
+	Name        string
+	Description *string
+	IsActive    bool
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
 }
 
 type OtpCode struct {
@@ -207,149 +323,6 @@ type RolePagePermission struct {
 	CanDelete bool
 }
 
-type Student struct {
-	ID                  uuid.UUID
-	StudentCode         string
-	CategoryID          uuid.UUID
-	YearConfigID        *uuid.UUID
-	FatherName          *string
-	MotherName          *string
-	Gender              *string
-	Email               *string
-	PrimaryMobile       string
-	SecondaryMobile     *string
-	WhatsappMobile      *string
-	HomeAddress         *string
-	City                *string
-	State               *string
-	Pincode             *string
-	SchoolName          *string
-	PassingBoard        *string
-	TenthPassingYear    *int32
-	TwelfthPassingYear  *int32
-	ScholarshipUid      *string
-	ScholarshipPassword *string
-	ProfilePhotoUrl     *string
-	Status              string
-	Remarks             *string
-	CreatedBy           *int64
-	UpdatedBy           *int64
-	CreatedAt           time.Time
-	UpdatedAt           time.Time
-	DeletedAt           *time.Time
-	FullName            string
-	CasteID             *uuid.UUID
-	BranchID            uuid.UUID
-}
-
-type StudentApplication struct {
-	ID                  uuid.UUID
-	StudentID           uuid.UUID
-	ApplicationTypeID   uuid.UUID
-	ApplicationStatusID uuid.UUID
-	ApplicationNumber   *string
-	ApplicationName     *string
-	LastDate            *time.Time
-	AppliedDate         *time.Time
-	SubmittedDate       *time.Time
-	PortalUsername      *string
-	PortalPassword      *string
-	Remarks             *string
-	CreatedBy           *int64
-	UpdatedBy           *int64
-	CreatedAt           time.Time
-	UpdatedAt           time.Time
-	DeletedAt           *time.Time
-	DeletedBy           *int64
-	FormTypeID          *uuid.UUID
-	BranchID            uuid.UUID
-}
-
-type StudentApplicationCollege struct {
-	ApplicationID uuid.UUID
-	CollegeID     uuid.UUID
-}
-
-type StudentAssignedCode struct {
-	ID           uuid.UUID
-	StudentID    uuid.UUID
-	CategoryID   uuid.UUID
-	YearConfigID uuid.UUID
-	StudentCode  string
-	CreatedAt    time.Time
-}
-
-type StudentCaste struct {
-	ID          uuid.UUID
-	Name        string
-	Description *string
-	Status      string
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
-}
-
-type StudentCategory struct {
-	ID          uuid.UUID
-	Name        string
-	Description *string
-	Status      string
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
-}
-
-type StudentCodeSequence struct {
-	ID                uuid.UUID
-	YearConfigID      uuid.UUID
-	CurrentNumber     int64
-	LastGeneratedCode *string
-	UpdatedAt         time.Time
-}
-
-type StudentCodeYearConfig struct {
-	ID            uuid.UUID
-	CategoryID    uuid.UUID
-	BusinessYear  int32
-	Prefix        string
-	Separator     string
-	PaddingLength int32
-	ResetSequence bool
-	IsActive      bool
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
-}
-
-type StudentFeePlan struct {
-	ID             uuid.UUID
-	StudentID      uuid.UUID
-	FeeTypeID      *uuid.UUID
-	FeeName        *string
-	TotalAmount    pgtype.Numeric
-	DiscountAmount pgtype.Numeric
-	DiscountReason *string
-	Remarks        *string
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
-	BranchID       uuid.UUID
-	CreatedBy      *int64
-}
-
-type StudentPayment struct {
-	ID               uuid.UUID
-	PaymentNumber    string
-	ReceiptNumber    *string
-	StudentID        uuid.UUID
-	StudentFeePlanID uuid.UUID
-	PaymentDate      time.Time
-	Amount           pgtype.Numeric
-	PaymentMethod    *string
-	ReferenceNumber  *string
-	Remarks          *string
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
-	BranchID         uuid.UUID
-	CreatedBy        *int64
-}
-
 type SubscriptionPlan struct {
 	PlanID          int64
 	PlanName        string
@@ -394,24 +367,52 @@ type SystemLog struct {
 	IpAddress  *string
 }
 
+type Task struct {
+	ID          int64
+	WorkflowID  int64
+	Description string
+	Status      string
+	CreatedAt   time.Time
+}
+
 type Tenant struct {
-	TenantID          int64
-	TenantName        string
-	CompanyName       *string
-	TenantCode        *string
-	SchemaName        string
-	Subdomain         *string
-	Status            string
-	ContactEmail      *string
-	ContactPhone      *string
-	LogoUrl           *string
-	WhatsappBalance   *int32
-	WhatsappSentCount int64
-	IsActive          bool
-	CreatedBy         *int64
-	UpdatedBy         *int64
-	CreatedAt         time.Time
-	UpdatedAt         *time.Time
+	TenantID           int64
+	TenantName         string
+	CompanyName        *string
+	TenantCode         *string
+	SchemaName         string
+	Subdomain          *string
+	Status             string
+	ContactEmail       *string
+	ContactPhone       *string
+	LogoUrl            *string
+	WhatsappBalance    *int32
+	WhatsappSentCount  int64
+	IsActive           bool
+	CreatedBy          *int64
+	UpdatedBy          *int64
+	CreatedAt          time.Time
+	UpdatedAt          *time.Time
+	OrgType            *string
+	KycStatus          string
+	KycVerifiedBy      *int64
+	KycVerifiedAt      *time.Time
+	KycRejectedBy      *int64
+	KycRejectedAt      *time.Time
+	KycRejectionReason *string
+	OrganizationTypeID *int64
+}
+
+type TenantDocument struct {
+	ID           int64
+	TenantID     int64
+	DocumentType string
+	OriginalName string
+	StoredName   string
+	MimeType     string
+	StoragePath  string
+	UploadedAt   time.Time
+	UploadedBy   int64
 }
 
 type TenantPayment struct {
@@ -458,6 +459,8 @@ type User struct {
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 	DeletedAt    *time.Time
+	UserType     string
+	IsSuperadmin bool
 }
 
 type UserActivity struct {
@@ -472,13 +475,6 @@ type UserActivity struct {
 	Changes     *string
 	CreatedOn   time.Time
 	BranchID    *uuid.UUID
-}
-
-type UserBranch struct {
-	ID        uuid.UUID
-	UserID    int64
-	BranchID  uuid.UUID
-	CreatedAt time.Time
 }
 
 type UserPermission struct {
@@ -507,4 +503,11 @@ type UserTenant struct {
 	IsOwner   bool
 	JoinedAt  *time.Time
 	CreatedAt time.Time
+}
+
+type Workflow struct {
+	ID            int64
+	ApplicationID int64
+	Status        string
+	CreatedAt     time.Time
 }

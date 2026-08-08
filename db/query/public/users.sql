@@ -8,8 +8,8 @@ SELECT * FROM users WHERE id = $1 AND deleted_at IS NULL;
 SELECT * FROM users WHERE google_id = $1 AND deleted_at IS NULL;
 
 -- name: CreateUser :one
-INSERT INTO users (email, password_hash, google_id, is_active, is_verified)
-VALUES (lower(sqlc.arg(email)), sqlc.arg(password_hash), sqlc.arg(google_id), sqlc.arg(is_active), sqlc.arg(is_verified))
+INSERT INTO users (email, password_hash, google_id, is_active, is_verified, is_superadmin)
+VALUES (lower(sqlc.arg(email)), sqlc.arg(password_hash), sqlc.arg(google_id), sqlc.arg(is_active), sqlc.arg(is_verified), COALESCE(sqlc.arg(is_superadmin), FALSE))
 RETURNING *;
 
 -- name: SetUserPassword :exec

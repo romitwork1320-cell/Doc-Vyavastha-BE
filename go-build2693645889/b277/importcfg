@@ -1,0 +1,5 @@
+# import config
+packagefile errors=C:\Users\romit\AppData\Local\go-build\14\14e0fccde2a6dba5f9398fa0a51e9e9ac26fddbdc365db6193b9334013dd4f61-d
+packagefile github.com/golang-jwt/jwt/v5=C:\Users\romit\AppData\Local\go-build\03\0365c43a7b9e54451777409ea7e8bc9f05dce13b88024608e4e1a169010b0e0d-d
+packagefile strconv=C:\Users\romit\AppData\Local\go-build\57\572d80c67345e812d03aaae4e051f0fc1890481ac5803d678252c1421622c9c8-d
+packagefile time=C:\Users\romit\AppData\Local\go-build\d8\d8c9d930f581aba89b15c6f852f2197c193cdaa2280033f5272302fd97329ec6-d

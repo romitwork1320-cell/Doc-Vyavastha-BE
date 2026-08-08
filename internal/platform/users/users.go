@@ -28,6 +28,7 @@ import (
 
 // Handler serves the Users endpoints.
 type Handler struct {
+	pool   *pgxpool.Pool
 	q      *public.Queries
 	logger *slog.Logger
 	mw     *middleware.Auth
@@ -35,7 +36,7 @@ type Handler struct {
 
 // New builds the handler from the shared pool.
 func New(pool *pgxpool.Pool, logger *slog.Logger, mw *middleware.Auth) *Handler {
-	return &Handler{q: public.New(pool), logger: logger, mw: mw}
+	return &Handler{pool: pool, q: public.New(pool), logger: logger, mw: mw}
 }
 
 // Mount registers routes under the platform router.
@@ -243,25 +244,56 @@ func (h *Handler) userPermissions(w http.ResponseWriter, r *http.Request) {
 		apiresp.BadRequest(w, "Invalid user id")
 		return
 	}
-	rows, err := h.q.GetUserPagePermissions(ctx, public.GetUserPagePermissionsParams{
-		UserID:   userID,
-		TenantID: reqctx.TenantID(ctx),
-	})
-	if err != nil {
-		h.fail(w, err)
-		return
-	}
+	
+	tenantID := reqctx.TenantID(ctx)
+	var items []userPagePermissionDto
 
-	items := make([]userPagePermissionDto, len(rows))
-	for i, r := range rows {
-		items[i] = userPagePermissionDto{
-			PageUrl:   r.RouteUrl,
-			CanView:   r.CanView,
-			CanAdd:    r.CanAdd,
-			CanEdit:   r.CanEdit,
-			CanDelete: r.CanDelete,
+	if tenantID == 0 {
+		// Personal workspace has no tenant schema, default to "Client" role permissions
+		q := `
+			SELECT p.route_url, rpp.can_view, rpp.can_add, rpp.can_edit, rpp.can_delete 
+			FROM public.role_page_permissions rpp
+			JOIN public.roles r ON r.role_id = rpp.role_id
+			JOIN public.pages p ON p.page_id = rpp.page_id
+			WHERE r.role_name = 'Client'
+		`
+		rows, err := h.pool.Query(ctx, q)
+		if err == nil {
+			for rows.Next() {
+				var routeUrl string
+				var canView, canAdd, canEdit, canDelete bool
+				if err := rows.Scan(&routeUrl, &canView, &canAdd, &canEdit, &canDelete); err == nil {
+					items = append(items, userPagePermissionDto{
+						PageUrl:   routeUrl,
+						CanView:   canView,
+						CanAdd:    canAdd,
+						CanEdit:   canEdit,
+						CanDelete: canDelete,
+					})
+				}
+			}
+			rows.Close()
+		}
+	} else {
+		rows, err := h.q.GetUserPagePermissions(ctx, public.GetUserPagePermissionsParams{
+			UserID:   userID,
+			TenantID: tenantID,
+		})
+		if err != nil {
+			h.fail(w, err)
+			return
+		}
+		for _, r := range rows {
+			items = append(items, userPagePermissionDto{
+				PageUrl:   r.RouteUrl,
+				CanView:   r.CanView,
+				CanAdd:    r.CanAdd,
+				CanEdit:   r.CanEdit,
+				CanDelete: r.CanDelete,
+			})
 		}
 	}
+
 	apiresp.OK(w, items, "")
 }
 

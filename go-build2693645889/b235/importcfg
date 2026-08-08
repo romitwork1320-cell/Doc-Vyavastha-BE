@@ -1,0 +1,25 @@
+# import config
+packagefile github.com/go-chi/chi/v5=C:\Users\romit\AppData\Local\go-build\36\36b579b3928e51999ecbfe98818009e00b7f8c050316dae6e1704c209cc743b1-d
+packagefile github.com/go-chi/chi/v5/middleware=C:\Users\romit\AppData\Local\go-build\67\67139e845437815acae2188b2c0a7082eaf8196d8127b18169e63cce331aecff-d
+packagefile github.com/go-chi/cors=C:\Users\romit\AppData\Local\go-build\eb\ebd9af04069750101b23b247b494f87eea6f358b5571cfebe4e4ce8c43887d44-d
+packagefile github.com/jackc/pgx/v5/pgxpool=C:\Users\romit\AppData\Local\go-build\5d\5d1c3fe1cdf1c339fbc1ef92fa948345efcc61bfdbc1f945200b42de764c9053-d
+packagefile github.com/thinkparq/edconsultancy-be/internal/apiresp=C:\Users\romit\AppData\Local\go-build\3e\3eb0f1d185ff6b60cea53c108e6d78035febc2be8fc1e40f5b6ba8e633e3ce44-d
+packagefile github.com/thinkparq/edconsultancy-be/internal/auth=D:\docvyavastha\Doc-Vyavastha-BE\go-build2693645889\b267\_pkg_.a
+packagefile github.com/thinkparq/edconsultancy-be/internal/config=C:\Users\romit\AppData\Local\go-build\8d\8d7e3aebecccbe965c9f8044f40cbebe306ac5c783bb7099038bc1a8c6ca7b23-d
+packagefile github.com/thinkparq/edconsultancy-be/internal/email=C:\Users\romit\AppData\Local\go-build\c4\c496e3abdb81a1ab2ec3416f53031be7971221ee8a9d75793058781196ca2570-d
+packagefile github.com/thinkparq/edconsultancy-be/internal/middleware=D:\docvyavastha\Doc-Vyavastha-BE\go-build2693645889\b522\_pkg_.a
+packagefile github.com/thinkparq/edconsultancy-be/internal/platform/notifications=C:\Users\romit\AppData\Local\go-build\45\4582652c757f0638736ae15964dde2037c7e28f72ae1f066b39e7a17ab683600-d
+packagefile github.com/thinkparq/edconsultancy-be/internal/platform/permissions=D:\docvyavastha\Doc-Vyavastha-BE\go-build2693645889\b525\_pkg_.a
+packagefile github.com/thinkparq/edconsultancy-be/internal/platform/profile=C:\Users\romit\AppData\Local\go-build\a1\a131301b2cac90dd1491f6c1f6f8395cc45ed8fd56f47ab4bd79721bcb7993a6-d
+packagefile github.com/thinkparq/edconsultancy-be/internal/platform/subscription=C:\Users\romit\AppData\Local\go-build\99\99c5061bf757937a2243b9b12fc48f951bec90b3a2a3dc5521037c7817896bb3-d
+packagefile github.com/thinkparq/edconsultancy-be/internal/platform/support=C:\Users\romit\AppData\Local\go-build\51\5114e93eb2d2d7cf9e6842d6f1068e9f342391cb8cbc0b5b4db9b23c857cd30c-d
+packagefile github.com/thinkparq/edconsultancy-be/internal/platform/systemlog=C:\Users\romit\AppData\Local\go-build\49\49c3895d7cbed4a1110b6f54105530d2c705b5c8c4f135398ca63f0fd7202cd5-d
+packagefile github.com/thinkparq/edconsultancy-be/internal/platform/tenants=D:\docvyavastha\Doc-Vyavastha-BE\go-build2693645889\b530\_pkg_.a
+packagefile github.com/thinkparq/edconsultancy-be/internal/platform/useractivity=C:\Users\romit\AppData\Local\go-build\f9\f9574f7cfa63ece6e0b6827c9f89c63c4e0277b9dc4f01bb4565ff82da83bebf-d
+packagefile github.com/thinkparq/edconsultancy-be/internal/platform/users=D:\docvyavastha\Doc-Vyavastha-BE\go-build2693645889\b532\_pkg_.a
+packagefile github.com/thinkparq/edconsultancy-be/internal/tenancy=C:\Users\romit\AppData\Local\go-build\fb\fbe67536c4f49eb42bdad26de019035f704cc460c9f3c5f07e6d2479b9c62523-d
+packagefile github.com/thinkparq/edconsultancy-be/internal/token=D:\docvyavastha\Doc-Vyavastha-BE\go-build2693645889\b277\_pkg_.a
+packagefile log/slog=C:\Users\romit\AppData\Local\go-build\51\51c3d21e8c41cd5c6f69d90e2aa0e399eeba739e44aa10889683f2986b756cef-d
+packagefile net/http=C:\Users\romit\AppData\Local\go-build\a1\a1bfa8e5b0d6b60a236e569442abaaaa82b8cc23577f6954eb96bba944cf9b17-d
+packagefile runtime/debug=C:\Users\romit\AppData\Local\go-build\a7\a7226a39d3baeca4394e6523c02f9e36eeab2f6dc9aa0ad7c3339d6e90935d69-d
+packagefile time=C:\Users\romit\AppData\Local\go-build\d8\d8c9d930f581aba89b15c6f852f2197c193cdaa2280033f5272302fd97329ec6-d
