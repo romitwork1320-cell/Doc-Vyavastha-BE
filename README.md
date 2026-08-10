@@ -42,17 +42,7 @@ request → auth middleware (JWT → identity{userID, tenantID, schema})
 
 ## Run it
 
-### Docker (everything, seeded)
-
-```bash
-docker compose up --build
-```
-
-Brings up Postgres + the API (migrated + seeded) on **http://localhost:8080**. Health: `GET /health`.
-
 Seeded demo login (tenant "Demo Consultancy"): **admin@demo.local / admin123**.
-
-The FE's `nginx.conf` proxies `/api` → `api:8080`, so this compose service name (`api`) matches a combined deployment.
 
 ### Local (Go + your own Postgres)
 

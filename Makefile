@@ -38,13 +38,6 @@ migrate-up: ## Apply public-schema migrations via the migrate CLI
 migrate-down: ## Roll back one public-schema migration
 	migrate -path $(PUBLIC_MIGRATIONS) -database "pgx5://$(DATABASE_URL)" down 1
 
-.PHONY: up
-up: ## Start the full stack (postgres + api) via docker compose
-	docker compose up --build
-
-.PHONY: down
-down: ## Stop the docker compose stack
-	docker compose down
 
 .PHONY: tools
 tools: ## Install dev tools (sqlc, migrate)
